@@ -15,3 +15,6 @@ datos/cache/
 # Salida del preprocesado
 datos/celdas/
 dist/
+
+# Registro de skills local: contiene rutas absolutas de la maquina
+.atl/
