@@ -4,7 +4,7 @@
 
 Motor que genera ciudades jugables en navegador a partir de datos geográficos abiertos. La ciudad es un **dato de entrada**, no código: el mismo pipeline debe poder generar cualquier territorio del mundo.
 
-> Estado: esqueleto. Hay dominio y contratos; todavía no hay ningún proveedor real ni nada que se vea en pantalla.
+> Estado: hay dominio, contratos, el proveedor de OSM y el preprocesado completo — de grados a archivos de celda. Todavía no hay nada que se vea en pantalla.
 
 ## La idea
 
@@ -61,6 +61,24 @@ Proveedores  ->  Preprocesado offline (Node)  ->  Celdas (~250 m)  ->  Navegador
 ```
 
 La zona UTM se deduce del territorio; no es una constante. A Coruña sale en EPSG:25829 (ETRS89 / UTM 29N) porque es donde cae, y porque es el datum nativo de Catastro y PNOA.
+
+## Celdas
+
+Cada celda se escribe en un archivo `.urbscell`: una cabecera fija, secciones de arrays tipados y una tabla de atributos en JSON. Lo que viaja son **huellas y semántica**, no mallas cocidas — la extrusión pasa en el runtime, así que las reglas de fachada se pueden retocar sin regenerar el territorio.
+
+Toda coordenada de la geometría es local a su celda. El origen absoluto aparece una sola vez, en la cabecera, en `float64`: un UTM absoluto dentro de un `Float32Array` cuantizaría A Coruña a una retícula de medio metro.
+
+El reparto byte a byte está en [`docs/decisiones/0003-formato-de-celda.md`](docs/decisiones/0003-formato-de-celda.md), con detalle suficiente para escribir un lector desde cero.
+
+```js
+import { crearArea, crearRegistro, crearTerritorio } from 'urbs-core';
+import { generarCeldas } from 'urbs-pipeline';
+
+const informe = await generarCeldas({ territorio, registro });
+// informe.totales      -> celdas, edificios, tramos y bytes escritos
+// informe.capas        -> qué proveedor sirvió cada capa
+// informe.atribuciones -> lo que debe salir en la pantalla de créditos
+```
 
 ## Requisitos
 
