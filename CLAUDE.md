@@ -45,7 +45,8 @@ Solo OSM tiene cobertura global. Catastro INSPIRE y PNOA/IGN son exclusivos de E
 | Altura | **Ninguno la aporta.** Se deriva siempre | `height` de OSM si existe y es sensata | Ver más abajo |
 | Uso dominante | Catastro (`currentUse`, solo en `Building`) | OSM `building` + POIs | Menos granularidad |
 | Grafo de calles | OSM | OSM | Sin degradación (fuente única) |
-| Relieve | MDT LiDAR PNOA 0,5 m | Copernicus DEM GLO-30 (30 m) | Mucha menos resolución |
+| Relieve | MDT02 PNOA-LiDAR 2 m | Copernicus DEM GLO-30 (30 m) | Mucha menos resolución |
+| Agua | Umbral sobre el MDT donde el tile lo permita | Línea de costa de OSM cerrada contra la celda | Ver la nota de abajo: el umbral no es fiable en general |
 | Suelo / ortofoto | PNOA 25 cm | No hay equivalente global libre a esa resolución | Texturas procedurales o material genérico |
 
 Los dos últimos casos son reales y conocidos: fuera de España no existe ortofoto libre de 25 cm con cobertura uniforme. El motor debe funcionar sin ella, no asumirla.
@@ -65,6 +66,12 @@ Medidos descargando y contando los datos reales, no inferidos de la documentaci�
 **`width` está al 2,1 %** (60 de 2 897 vías) y `lanes` al 16,1 %. La cascada `width → lanes → tipo` es correcta, pero aterriza en la tabla por tipo de vía el ~84 % de las veces. Esa tabla **es** el modelo de anchura de calle, no un último recurso.
 
 **El viario es mayoritariamente peatonal**: 1 423 `footway` frente a 491 `residential`, más 193 `steps`. Hay que filtrar por clase antes de construir el grafo circulable o el tráfico con IA acaba subiendo escaleras.
+
+**El MDT a 0,5 m no existe para A Coruña.** La tercera cobertura (MDT01) figura como «cobertura por completar» en la provincia 15: cero ficheros. El producto real y más fino disponible es **MDT02, 2 m, PNOA-LiDAR segunda cobertura**, RMSE Z ≤ 25 cm, vuelos 2015-2021. Descarga por cuadrante de hoja MTN25, de 60 a 100 MB. Las hojas que cubren el ámbito son 0021, 0022, 0045 y 0046 en HU29.
+
+**El mar a cota cero es un artefacto de tile, no una garantía del producto.** Medido sobre píxeles reales: en el cuadrante 3 (Ciudad Vieja, Pescadería, Orzán) el mar se clava a 0,00 y el 99,926 % de los ceros forma una sola componente conexa con el borde — umbralizar da una costa casi perfecta. En el cuadrante 2, el de al lado hacia Oleiros y Sada, solo hay **4 píxeles** a cero exacto y el mar abierto sale como retorno LiDAR crudo entre −0,89 y +1,4 m. El `nodata` declarado es −32767 y significa «no producido», nunca agua: el CNIG interpola y edita los huecos sobre agua para asignarles cota. **Conclusión: la máscara de agua debe ser enchufable** — umbral más componente conexa donde el tile lo permita, línea de costa de OSM cerrada contra la celda donde no.
+
+**El datum vertical es ortométrico, geoide EGM08.** Confirmado en la especificación del IGN y en la ficha del CNIG. Por tanto `y = elevación` no necesita offset y la decisión de que el mar sea el nivel 0 es correcta.
 
 ## Fuentes de datos
 
@@ -92,6 +99,10 @@ Enlaces:
 - **Un 404 del Catastro devuelve HTTP 200** con una página HTML. Validar los bytes mágicos del ZIP, no el código de estado.
 - **Los GML del Catastro son ISO-8859-1** y el parser no lo detecta solo. Leer con `{ encoding: 'latin1' }` o «CORUÑA» se corrompe.
 - **EPSG:25829 no viene de serie en proj4**; hay que registrarlo. Y no pedir nunca CRS geográfico a estos servicios: el WFS devuelve **lat,lon** para 4326 aunque uses la forma corta, mientras que GeoJSON, proj4 y three.js esperan lon,lat. Se trabaja en 25829 métrico de punta a punta.
+- **El MDT declara códigos EPSG incoherentes entre cuadrantes del mismo producto.** El cuadrante 3 de la hoja 0021 declara **3041** (ETRS89 / UTM 29N con orden norte-este) y el cuadrante 2 declara 25829 (este-norte). Es el mismo CRS y **los datos están almacenados E-N en los dos**: un lector que respete el orden de ejes declarado transpone ese tile.
+- **La descarga del CNIG es scriptable y sin registro**, en tres pasos contra `centrodedescargas.cnig.es`: cookie de sesión, `POST /archivosSerie` para listar, `POST /initDescargaDir` y `POST /descargaDir`. El campo del último paso es **`secDescDirLA`**, no `secuencial`: con `secuencial` devuelve una página HTML en vez del fichero.
+- **El WCS de IDEE no sirve para razonar sobre `nodata`.** Reconvierte a Int16 sin etiqueta de nodata, y el ASC sale sin línea `NODATA_value`. Vale como fuente cómoda de 5 m, no como evidencia.
+- **`geotiff` 3.x volvió perezosos los campos del FileDirectory**: `fd.BitsPerSample` es `undefined`. Hay que usar los accesores (`getSampleFormat`, `getBitsPerSample`, `getGDALNoData`, `getBoundingBox`). Código escrito contra la 2.x lee `undefined` en silencio.
 
 ## Licencias y atribuciones (obligatorio)
 
@@ -99,7 +110,7 @@ Enlaces:
 | :---- | :---- | :---- |
 | Catastro | Licencia de acceso y uso de los servicios y conjuntos de datos INSPIRE de la D.G. del Catastro, v1.0 (2016) | Citar «Dirección General del Catastro (Ministerio de Hacienda)». **Uso comercial autorizado, pero solo de datos transformados** |
 | OpenStreetMap | ODbL | "© colaboradores de OpenStreetMap". El share-alike solo afecta a la base de datos modificada si se redistribuye |
-| IGN / PNOA | CC BY 4.0 (uso comercial permitido) | "Obra derivada de PNOA CC-BY scne.es" |
+| IGN / PNOA (MDT02) | CC BY 4.0 (uso comercial permitido) | «Obra derivada de MDT02-cob2 2015-2021 CC-BY 4.0 scne.es». La fórmula lleva el nombre del producto y el rango de años: PNOA-ortofoto y MDT02 son productos distintos con cadenas distintas |
 | Copernicus DEM | Licencia Copernicus (uso libre con atribución) | Citar la fuente |
 | Texturas CC0 | Dominio público | Ninguna |
 
