@@ -7,6 +7,14 @@
     "lonMax": -8.39,
     "latMax": 43.38
   },
+  "relieve": {
+    "hojas": [
+      {
+        "id": 10323766,
+        "nombre": "MDT02-ETRS89-HU29-0021-3-COB2"
+      }
+    ]
+  },
   "ladoCeldaMetros": 250,
   "umbralAguaMetros": 1.5,
   "notas": "Vertical slice de A Coruna: la peninsula del casco historico, Pescaderia y la playa del Orzan. Unos 2,4 x 2,2 km, de los que mas de la mitad es mar. El EPSG no se fija: se deduce del centro del area (ETRS89 / UTM 29N). Para generar otra ciudad se copia este archivo y se cambian las cuatro esquinas. El umbral de agua son 1,5 m y es saber LOCAL, por eso vive aqui y no en el motor: por abajo lo fija el ruido con que vuelve el mar en el MDT02 —en este territorio solo 7 postes de 108.160 bajan de cero, pero el 13% cae en la banda 0-1 m—, y por arriba lo fijan los muelles de A Coruna, que estan a 3-4 m y no pueden inundarse. Otro sitio necesita otro numero: un delta o un polder rompen este."
