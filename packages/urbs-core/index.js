@@ -41,5 +41,17 @@ export {
   esSeguroEnFloat32,
   exigirCoordenadasLocales,
 } from './src/dominio/celda.js';
+export {
+  MAGIA_URBSCELL,
+  VERSION_FORMATO,
+  BYTES_CABECERA,
+  ALINEACION_SECCION,
+  MARGEN_EN_LADOS_POR_DEFECTO,
+  AUSENTE_ENTERO,
+  margenPorDefecto,
+  codificarCelda,
+  decodificarCelda,
+  leerCabecera,
+} from './src/formato/celda-binaria.js';
 export { Capa, validarProveedor, metodoDeCapa } from './src/proveedores/contratos.js';
 export { crearRegistro, SinCoberturaError } from './src/proveedores/registro.js';
