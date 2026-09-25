@@ -18,6 +18,17 @@
  *    unico que hace falta es pintarlo distinto.
  */
 
+/**
+ * Si un poste es agua, segun la bandera que trae la celda.
+ *
+ * @param {{agua: Uint8Array}} relieve
+ * @param {number} indice
+ * @returns {boolean}
+ */
+function esAgua(relieve, indice) {
+  return relieve.agua !== undefined && (relieve.agua[indice >> 3] & (1 << (indice & 7))) !== 0;
+}
+
 /** Color de la tierra. Gris neutro: el protagonista es la ciudad. */
 export const COLOR_TIERRA = Object.freeze([0.43, 0.44, 0.46]);
 
@@ -93,7 +104,7 @@ export function cotaEnCelda(relieve, este, norte) {
  * @returns {{posiciones: Float32Array, normales: Float32Array, colores: Float32Array,
  *           indices: Uint32Array, triangulos: number}|null}
  */
-export function construirTerrenoDeCelda(vistas, { umbralAgua = 1.5 } = {}) {
+export function construirTerrenoDeCelda(vistas, { umbralAgua = 0 } = {}) {
   const relieve = {
     cotas: vistas.relieve.cotas,
     cotaBase: vistas.relieve.cotaBase,
@@ -124,7 +135,11 @@ export function construirTerrenoDeCelda(vistas, { umbralAgua = 1.5 } = {}) {
       posiciones[base + 1] = cota ?? umbralAgua;
       posiciones[base + 2] = -norte;
 
-      const color = cota === null || cota <= umbralAgua ? COLOR_AGUA : COLOR_TIERRA;
+      // La bandera la decidio el preprocesado con el territorio entero delante.
+      // Aqui NO se vuelve a decidir: estar bajo la cota del agua no basta para
+      // ser agua —hay trincheras, diques secos y rampas por debajo— y lo que
+      // distingue el mar de un socavon es que sale del territorio.
+      const color = esAgua(vistas.relieve, indice) ? COLOR_AGUA : COLOR_TIERRA;
       colores[base] = color[0];
       colores[base + 1] = color[1];
       colores[base + 2] = color[2];

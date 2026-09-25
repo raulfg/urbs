@@ -31,7 +31,7 @@ import { SIN_DATO } from '../dominio/elevacion.js';
 export const MAGIA_URBSCELL = 'URBSCELL';
 
 /** Version del formato. Un lector que no la reconozca debe negarse a leer. */
-export const VERSION_FORMATO = 2;
+export const VERSION_FORMATO = 3;
 
 /** Tamano exacto de la cabecera, en bytes. */
 export const BYTES_CABECERA = 88;
@@ -153,7 +153,7 @@ export function margenPorDefecto(ladoCeldaMetros) {
  */
 function codificarRelieve(relieve, claveCelda) {
   if (relieve === null || relieve === undefined) {
-    return { postes: 0, pasoMetros: 0, cotaBase: 0, cotas: new Int16Array(0) };
+    return { postes: 0, pasoMetros: 0, cotaBase: 0, cotas: new Int16Array(0), agua: new Uint8Array(0) };
   }
 
   const { paso, cotas } = relieve;
@@ -198,7 +198,27 @@ function codificarRelieve(relieve, claveCelda) {
     salida[i] = decimetros;
   }
 
-  return { postes, pasoMetros: paso, cotaBase, cotas: salida };
+  // La bandera de agua va en BITS: un booleano por poste son 676 bits por celda
+  // de 26x26, o sea 85 bytes en vez de 676. A 200 km2 la diferencia se nota.
+  //
+  // Y va en el archivo en vez de deducirse al dibujar porque la decision no se
+  // puede tomar mirando una celda: estar bajo la cota del agua no basta para
+  // ser agua —hay trincheras, diques secos y rampas por debajo— y lo que
+  // distingue el mar de un socavon es que SALE del territorio. Eso solo se ve
+  // con el territorio entero delante, o sea en el preprocesado.
+  const bits = new Uint8Array(Math.ceil(cotas.length / 8));
+  if (relieve.agua !== undefined && relieve.agua !== null) {
+    if (relieve.agua.length !== cotas.length) {
+      throw new RangeError(
+        `codificarCelda: la bandera de agua de ${claveCelda} tiene ${relieve.agua.length} valores y los postes son ${cotas.length}`,
+      );
+    }
+    for (let i = 0; i < cotas.length; i += 1) {
+      if (relieve.agua[i]) bits[i >> 3] |= 1 << (i & 7);
+    }
+  }
+
+  return { postes, pasoMetros: paso, cotaBase, cotas: salida, agua: bits };
 }
 
 /**
@@ -653,6 +673,7 @@ export function codificarCelda(contenido) {
     { tipo: Int8Array, datos: tramosNivel },
     { tipo: Uint16Array, datos: tramosProcedencia },
     { tipo: Int16Array, datos: relieveCodificado.cotas },
+    { tipo: Uint8Array, datos: relieveCodificado.agua },
   ];
 
   let cursor = BYTES_CABECERA;
@@ -856,6 +877,7 @@ export function vistasDeCelda(origen) {
 
   const postesRelieve = cabecera.relieve.postes;
   const relieveCotas = cursor.leer(Int16Array, postesRelieve * postesRelieve);
+  const relieveAgua = cursor.leer(Uint8Array, Math.ceil((postesRelieve * postesRelieve) / 8));
 
   const finTabla = base + cabecera.desplazamientoTablaAtributos + cabecera.bytesTablaAtributos;
   if (finTabla > limite) {
@@ -907,6 +929,7 @@ export function vistasDeCelda(origen) {
       pasoMetros: cabecera.relieve.pasoMetros,
       cotaBase: cabecera.relieve.cotaBase,
       cotas: relieveCotas,
+      agua: relieveAgua,
     }),
     diccionarios: Object.freeze({
       usos: tabla.diccionarios.usos,
@@ -1024,4 +1047,21 @@ export function decodificarCelda(bytes) {
     tramos,
     relieve: relieveDeVistas(vistas),
   });
+}
+
+/**
+ * Si el poste `indice` de una celda es agua.
+ *
+ * La bandera viaja en bits y la decide el PREPROCESADO, no el visor: estar por
+ * debajo de la cota del agua no basta para ser agua —hay trincheras, diques
+ * secos y rampas de aparcamiento por debajo—, y lo que distingue el mar de un
+ * socavon es que el mar SALE del territorio. Eso no se puede ver mirando una
+ * celda de 250 m.
+ *
+ * @param {{agua: Uint8Array}} relieve  `vistas.relieve`
+ * @param {number} indice
+ * @returns {boolean}
+ */
+export function esAguaEnPoste(relieve, indice) {
+  return (relieve.agua[indice >> 3] & (1 << (indice & 7))) !== 0;
 }

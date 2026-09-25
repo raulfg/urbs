@@ -34,7 +34,7 @@ export const PASO_MALLA_POR_DEFECTO = 10;
  * @param {number} [datos.paso]
  * @returns {Promise<{paso: number, cotas: Float32Array}|null>}
  */
-export async function muestrearRelieveDeCelda({ celda, fuente, paso = PASO_MALLA_POR_DEFECTO }) {
+export async function muestrearRelieveDeCelda({ celda, fuente, paso = PASO_MALLA_POR_DEFECTO, mascaraAgua = null }) {
   if (!(Number.isFinite(paso) && paso > 0)) {
     throw new RangeError(`muestrearRelieveDeCelda: el \`paso\` debe ser positivo, y es ${paso}`);
   }
@@ -61,6 +61,9 @@ export async function muestrearRelieveDeCelda({ celda, fuente, paso = PASO_MALLA
   }
 
   const cotas = new Float32Array(postes * postes);
+  // La bandera de agua NO se deduce aqui de la cota: la decide la mascara del
+  // territorio entero, porque estar bajo el umbral no basta para ser agua.
+  const agua = new Uint8Array(postes * postes);
   let utiles = 0;
   for (let fila = 0; fila < postes; fila += 1) {
     // Fila 0 es la del NORTE, igual que en el GeoTIFF y en la malla de origen.
@@ -74,9 +77,12 @@ export async function muestrearRelieveDeCelda({ celda, fuente, paso = PASO_MALLA
         continue;
       }
       cotas[fila * postes + columna] = cota;
+      if (mascaraAgua !== null && mascaraAgua.esAgua(este0 + columna * paso, norte)) {
+        agua[fila * postes + columna] = 1;
+      }
       utiles += 1;
     }
   }
 
-  return utiles === 0 ? null : { paso, cotas };
+  return utiles === 0 ? null : { paso, cotas, agua };
 }

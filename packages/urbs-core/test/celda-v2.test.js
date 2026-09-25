@@ -9,6 +9,7 @@ import {
   BYTES_CABECERA,
   SIN_DATO_RELIEVE,
   VERSION_FORMATO,
+  esAguaEnPoste,
   codificarCelda,
   decodificarCelda,
   leerCabecera,
@@ -50,8 +51,8 @@ function codificar(contenido) {
 
 // --- Version y cabecera
 
-test('el formato sube a 2 y la cabecera crece a 88 bytes', () => {
-  assert.equal(VERSION_FORMATO, 2);
+test('el formato sube a 3 y la cabecera se queda en 88 bytes', () => {
+  assert.equal(VERSION_FORMATO, 3);
   assert.equal(BYTES_CABECERA, 88);
   assert.equal(BYTES_CABECERA % 8, 0, 'la cabecera tiene que dejar las secciones alineadas');
 });
@@ -184,4 +185,50 @@ test('todo lo de v1 sigue estando donde estaba, solo que 16 bytes mas alla', () 
   assert.equal(vistas.cabecera.ladoCeldaMetros, LADO);
   assert.equal(vistas.cabecera.numeroTramos, 1);
   assert.equal(vistas.tramos.anchura[0], 10);
+});
+
+// --- Bandera de agua (v3)
+
+test('la bandera de agua viaja por poste y en BITS', () => {
+  // Un booleano por poste son 676 bits en una celda de 26x26: 85 bytes en vez
+  // de 676. A 200 km2 la diferencia se nota.
+  const agua = Uint8Array.from([1, 0, 0, 1, 1, 0, 0, 0, 1]);
+  const vistas = vistasDeCelda(
+    codificar({ relieve: { ...relieve([1, 2, 3, 4, 5, 6, 7, 8, 9]), agua } }),
+  );
+
+  assert.equal(vistas.relieve.agua.length, Math.ceil(9 / 8));
+  for (let i = 0; i < 9; i += 1) {
+    assert.equal(esAguaEnPoste(vistas.relieve, i), agua[i] === 1, `poste ${i}`);
+  }
+});
+
+test('sin bandera declarada, ningun poste es agua', () => {
+  // Es el fallo seguro: "falta agua" se ve al instante, "sobra agua" inunda
+  // calles sin avisar.
+  const vistas = vistasDeCelda(codificar({ relieve: relieve([1, 2, 3, 4, 5, 6, 7, 8, 9]) }));
+
+  for (let i = 0; i < 9; i += 1) {
+    assert.equal(esAguaEnPoste(vistas.relieve, i), false);
+  }
+});
+
+test('una bandera que no cuadre con los postes se rechaza', () => {
+  assert.throws(
+    () => codificar({ relieve: { ...relieve([1, 2, 3, 4]), agua: Uint8Array.from([1, 0]) } }),
+    /agua|postes/i,
+  );
+});
+
+test('un poste bajo la cota del agua puede NO ser agua: es la razon de que exista la bandera', () => {
+  // Una trinchera, un dique seco o una rampa de aparcamiento estan por debajo
+  // del mar y son tierra. Lo que distingue el mar de un socavon es que sale del
+  // territorio, y eso no se ve mirando una celda.
+  const vistas = vistasDeCelda(
+    codificar({
+      relieve: { ...relieve([-3, 10, 20, 30]), agua: Uint8Array.from([0, 0, 0, 0]) },
+    }),
+  );
+
+  assert.equal(esAguaEnPoste(vistas.relieve, 0), false);
 });

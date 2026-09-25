@@ -94,21 +94,44 @@ test('el este va a X y el norte a -Z, como en todo lo demas', () => {
 
 // --- El mar, que sale solo
 
-test('lo que esta por debajo del umbral se pinta de AGUA', () => {
-  // Aqui no hay capa de agua ni poligonos de costa: el MDT ya trae el mar y la
-  // orilla es donde la cota cruza el umbral.
-  const terreno = construirTerrenoDeCelda(relieveDe([0, 0, 40, 40], 10), { umbralAgua: 1.5 });
+test('el color lo decide la BANDERA de la celda, no la cota', () => {
+  // Estar por debajo de la cota del agua NO basta para ser agua: hay
+  // trincheras, diques secos y rampas de aparcamiento por debajo. Medido sobre
+  // la hoja real de A Coruna, 46.690 pixeles —dieciocho hectareas y media—
+  // estan bajo el umbral y no tienen salida al mar. La decision la toma el
+  // preprocesado con el territorio entero delante, y aqui solo se lee.
+  const conAgua = construirTerrenoDeCelda({
+    ...relieveDe([0, 0, 40, 40]),
+    relieve: { ...relieveDe([0, 0, 40, 40]).relieve, agua: Uint8Array.from([0b0011]) },
+  });
 
-  assert.deepEqual([...terreno.colores.slice(0, 3)], COLOR_AGUA.map((c) => Math.fround(c)));
-  assert.deepEqual([...terreno.colores.slice(6, 9)], COLOR_TIERRA.map((c) => Math.fround(c)));
+  assert.deepEqual([...conAgua.colores.slice(0, 3)], COLOR_AGUA.map((c) => Math.fround(c)));
+  assert.deepEqual([...conAgua.colores.slice(6, 9)], COLOR_TIERRA.map((c) => Math.fround(c)));
 });
 
-test('el umbral es un parametro: hay hojas donde el mar no cae en cero', () => {
-  const alto = construirTerrenoDeCelda(relieveDe([1, 1, 40, 40]), { umbralAgua: 1.5 });
-  const bajo = construirTerrenoDeCelda(relieveDe([1, 1, 40, 40]), { umbralAgua: 0 });
+test('un poste a cota NEGATIVA puede ser TIERRA si la bandera lo dice', () => {
+  // Es justo el caso que motiva la bandera: un dique seco esta bajo el nivel
+  // del mar y esta seco.
+  const base = relieveDe([-3, -3, 40, 40]);
+  const terreno = construirTerrenoDeCelda({
+    ...base,
+    relieve: { ...base.relieve, agua: Uint8Array.from([0]) },
+  });
 
-  assert.deepEqual([...alto.colores.slice(0, 3)], COLOR_AGUA.map((c) => Math.fround(c)));
-  assert.deepEqual([...bajo.colores.slice(0, 3)], COLOR_TIERRA.map((c) => Math.fround(c)));
+  for (let i = 0; i < 4; i += 1) {
+    assert.deepEqual(
+      [...terreno.colores.slice(i * 3, i * 3 + 3)],
+      COLOR_TIERRA.map((c) => Math.fround(c)),
+      `poste ${i}`,
+    );
+  }
+});
+
+test('sin bandera no se pinta agua: el fallo seguro es quedarse seco', () => {
+  // "Falta agua" se ve al instante; "sobra agua" inunda calles sin avisar.
+  const terreno = construirTerrenoDeCelda(relieveDe([0, 0, 0, 0]));
+
+  assert.deepEqual([...terreno.colores.slice(0, 3)], COLOR_TIERRA.map((c) => Math.fround(c)));
 });
 
 test('un hueco sin dato no abre un pozo: se queda al nivel del umbral', () => {

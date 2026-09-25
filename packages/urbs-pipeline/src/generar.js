@@ -21,6 +21,7 @@ import { Capa, SinCoberturaError, codificarCelda, margenPorDefecto } from 'urbs-
 import { crearReproyectorDeTerritorio } from './reproyeccion.js';
 import { trocear } from './troceado.js';
 import { muestrearRelieveDeCelda, PASO_MALLA_POR_DEFECTO } from './relieve.js';
+import { mascaraDeAguaDeTerritorio } from './agua-territorio.js';
 
 /** Directorio de salida por defecto. Esta en `.gitignore`: es territorio generado. */
 export const DIRECTORIO_CELDAS_POR_DEFECTO = 'datos/celdas';
@@ -52,6 +53,27 @@ const CAPA_RELIEVE = Capa.RELIEVE;
  * @param {Uint8Array} bytes
  * @returns {Promise<void>}
  */
+/**
+ * Rectangulo que cubre todas las celdas, alineado al paso de la malla.
+ *
+ * @param {Map<string, object>} celdas
+ * @param {number} paso
+ * @returns {{esteMin: number, esteMax: number, norteMin: number, norteMax: number}}
+ */
+function limitesDeCeldas(celdas, paso) {
+  let esteMin = Infinity, esteMax = -Infinity, norteMin = Infinity, norteMax = -Infinity;
+  for (const { celda } of celdas.values()) {
+    esteMin = Math.min(esteMin, celda.origen.este);
+    norteMin = Math.min(norteMin, celda.origen.norte);
+    esteMax = Math.max(esteMax, celda.origen.este + celda.ladoCeldaMetros);
+    norteMax = Math.max(norteMax, celda.origen.norte + celda.ladoCeldaMetros);
+  }
+  // Los origenes de celda son multiplos del lado y el lado lo es del paso, asi
+  // que la rejilla de la mascara cae EXACTAMENTE sobre los postes de cada celda.
+  void paso;
+  return { esteMin, esteMax, norteMin, norteMax };
+}
+
 async function escribirEnDisco(ruta, bytes) {
   await mkdir(dirname(ruta), { recursive: true });
   await writeFile(ruta, bytes);
@@ -140,6 +162,20 @@ export async function generarCeldas({
     if (!(error instanceof SinCoberturaError)) throw error;
   }
 
+  // Que es agua se decide UNA vez y con el territorio entero delante. Por celda
+  // no se puede: el borde de una celda de 250 m no es el borde del mundo, y una
+  // ria quedaria cortada en la primera.
+  let mascaraAgua = null;
+  if (fuenteRelieve !== null && umbralAguaMetros !== null) {
+    const limites = limitesDeCeldas(celdas, pasoMallaMetros);
+    mascaraAgua = await mascaraDeAguaDeTerritorio({
+      fuente: fuenteRelieve,
+      limites,
+      paso: pasoMallaMetros,
+      umbral: umbralAguaMetros,
+    });
+  }
+
   const directorioTerritorio = join(directorioSalida, territorio.id);
   /** @type {ResumenDeCelda[]} */
   const resumenes = [];
@@ -154,6 +190,7 @@ export async function generarCeldas({
         celda: contenido.celda,
         fuente: fuenteRelieve,
         paso: pasoMallaMetros,
+        mascaraAgua,
       });
       if (relieve !== null) {
         celdasConRelieve += 1;
