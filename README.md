@@ -4,7 +4,7 @@
 
 Motor que genera ciudades jugables en navegador a partir de datos geográficos abiertos. La ciudad es un **dato de entrada**, no código: el mismo pipeline debe poder generar cualquier territorio del mundo.
 
-> Estado: la cadena completa funciona de punta a punta — OSM → celdas → navegador. Se puede **conducir** por A Coruña: hay suelo sólido, los edificios no se atraviesan y un coche arcade con cámara de persecución. No hay tráfico, ni fachadas, ni texturas, ni **relieve** — el terreno es un plano llano, así que las cuestas reales de la ciudad todavía no están.
+> Estado: la cadena completa funciona de punta a punta — OSM + PNOA-LiDAR → celdas → navegador. Se puede **conducir** por A Coruña con su **relieve real** (hay celdas con 108 m de desnivel) y con el **mar en su sitio**, que sale del propio modelo del terreno sin capa de agua. No hay tráfico, ni peatones, ni fachadas, ni texturas, ni ortofoto.
 
 ## La idea
 
@@ -31,7 +31,7 @@ Solo OSM tiene cobertura mundial. Catastro y PNOA son exclusivos de España. As�
 | Plantas | Catastro (por parte) | OSM `building:levels` | Hay que estimar |
 | Altura | *nadie la aporta* | *nadie la aporta* | Se deriva siempre de las plantas |
 | Viario | OSM | OSM | Nada, fuente única |
-| Relieve | MDT LiDAR PNOA (0,5 m) | Copernicus DEM (30 m) | Resolución |
+| Relieve | **MDT02 PNOA-LiDAR (2 m)** | Copernicus DEM (30 m) | Resolución |
 | Suelo | Ortofoto PNOA (25 cm) | *no existe equivalente libre* | Hay que ir a textura procedural |
 
 Dos filas de esa tabla son limitaciones reales, no huecos por rellenar. Fuera de España no hay ortofoto libre de 25 cm con cobertura uniforme, y **la altura de los edificios no la da ninguna fuente**: `heightAboveGround` no existe en el Catastro y `height` cubre el 0,3 % en OSM. Se deriva de las plantas, a 3 m por planta, que es la constante que el propio Catastro delata en sus datos bajo rasante.
@@ -71,7 +71,7 @@ Cada celda se escribe en un archivo `.urbscell`: una cabecera fija, secciones de
 
 Toda coordenada de la geometría es local a su celda. El origen absoluto aparece una sola vez, en la cabecera, en `float64`: un UTM absoluto dentro de un `Float32Array` cuantizaría A Coruña a una retícula de medio metro.
 
-El reparto byte a byte está en [`docs/decisiones/0003-formato-de-celda.md`](docs/decisiones/0003-formato-de-celda.md), con detalle suficiente para escribir un lector desde cero.
+El reparto byte a byte está en [`docs/decisiones/0003-formato-de-celda.md`](docs/decisiones/0003-formato-de-celda.md), con detalle suficiente para escribir un lector desde cero. El formato va por la **versión 3**: la 2 añadió la malla de relieve y la estructura del viario (puente, túnel, nivel) y la 3 la bandera de agua por poste. Un lector que no reconozca la versión **se niega a leer**, así que las celdas viejas hay que regenerarlas.
 
 ```js
 import { crearArea, crearRegistro, crearTerritorio } from 'urbs-core';
@@ -106,6 +106,11 @@ npm run generar -- territorios/marineda-torre-de-hercules.json
 ```
 
 Hay dos territorios versionados. El primero es el *vertical slice* original, más de la mitad mar. El segundo cubre la península entera —la Torre de Hércules, el Orzán, Riazor, la Ciudad Vieja y la Marina— y existe porque en el primero no hay ningún hito reconocible y cuesta orientarse. Mismo pipeline, mismo lado de celda: solo cambian las cuatro esquinas.
+
+Un territorio declara además dos cosas que son **saber local y no del motor**:
+
+- `relieve.hojas` — qué cuadrantes del MDT02 le hacen falta, con su identificador de descarga del CNIG. Son 60-100 MB cada uno, se bajan una vez y viven en `datos/crudos/` sin versionar.
+- `umbralAguaMetros` — a qué cota deja de haber agua **aquí**. Por abajo lo fija el ruido con que vuelve el mar en el LiDAR; por arriba, la altura de los muelles. En A Coruña son 1,5 m: los muelles están a 3-4 m y no pueden inundarse. Otro sitio necesita otro número — un delta o un polder rompen este.
 
 Descarga las capas que falten (una sola petición a Overpass por área), las reproyecta a los metros del territorio, las reparte en celdas y escribe un `.urbscell` por celda con contenido más un `indice.json`.
 
@@ -166,7 +171,15 @@ Ninguna coordenada UTM absoluta llega a la GPU: cada celda se coloca en `origen 
 
 El colisionador de un edificio es su **casco convexo**, deducido de la huella y no de la malla. Eso tiene un precio que se acepta a conciencia: un edificio en L se rellena por la escotadura, y en un casco medieval eso estrecha las calles. Por eso el coche nace sobre la calle más **ancha** de su celda, no sobre la más larga.
 
-**No** hay tráfico, peatones, misiones, fachadas procedurales, texturas, daños ni ortofoto. Y **no hay relieve**: el suelo es un plano llano en la cota cero, así que A Coruña sale plana aunque tenga cuestas de verdad. Lo que varía de altura son los edificios (de 2 a 119 m en este territorio), no el terreno. El relieve entra cuando entre el MDT LiDAR del PNOA.
+### El relieve y el mar
+
+El suelo ya no es un plano: cada celda trae su propia malla de alturas del **MDT02 del PNOA-LiDAR** (2 m, segunda cobertura). Edificios, calles, el coche y el campo de colisiones se apoyan todos en **esa misma malla** — no hay una segunda versión del suelo que pueda discrepar de la primera.
+
+**El mar no tiene capa propia.** No hay polígonos de agua ni línea de costa cerrada: el modelo del terreno ya trae el mar, y la costa es donde la cota cruza el umbral. Pero *estar bajo esa cota no basta para ser agua* — hay trincheras, diques secos y rampas de aparcamiento por debajo, y en este territorio hay **510 postes bajo el umbral que son tierra** y **7 a cota negativa y secos**. Lo que distingue el mar de un socavón es que **el mar sale del territorio**, así que la decisión se toma una vez en el preprocesado, con todo delante, y cada poste viaja con su bandera.
+
+El razonamiento completo, con las mediciones, está en [`docs/decisiones/0005-relieve-y-agua.md`](docs/decisiones/0005-relieve-y-agua.md): por qué OSM no puede dar el mar, por qué el paso de malla son 10 m y no 5 ni 25, por qué un edificio se apoya en el mínimo bajo su huella, y por qué 53 de los 81 «túneles» del casco viejo no son túneles.
+
+**No** hay tráfico, peatones, misiones, fachadas procedurales, texturas, daños ni ortofoto.
 
 ## Convenciones
 
