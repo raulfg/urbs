@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { crearMallaElevacion, SIN_DATO } from '../src/dominio/elevacion.js';
 import {
-  UMBRAL_AGUA_POR_DEFECTO,
+  UMBRAL_AGUA_DE_RESERVA,
   mascaraDeAguaPorUmbral,
 } from '../src/dominio/agua.js';
 
@@ -141,8 +141,8 @@ test('el umbral es un parametro: hay hojas donde el mar no cae en cero exacto', 
 });
 
 test('el umbral por defecto existe y es pequeno, no cero a secas', () => {
-  assert.ok(UMBRAL_AGUA_POR_DEFECTO >= 0);
-  assert.ok(UMBRAL_AGUA_POR_DEFECTO < 3, 'por encima de esto se empieza a comer muelle');
+  assert.ok(UMBRAL_AGUA_DE_RESERVA >= 0);
+  assert.ok(UMBRAL_AGUA_DE_RESERVA < 3, 'por encima de esto se empieza a comer muelle');
 });
 
 // --- Casos limite

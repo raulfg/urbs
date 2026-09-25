@@ -27,7 +27,12 @@ import {
 
 import { DIRECTORIO_CELDAS_POR_DEFECTO, generarCeldas } from '../src/generar.js';
 import { NOMBRE_INDICE, construirIndice } from '../src/indice.js';
-import { cargarDefinicion, leerDefinicion, relieveDeDefinicion } from '../src/territorios.js';
+import {
+  cargarDefinicion,
+  leerDefinicion,
+  relieveDeDefinicion,
+  umbralAguaDeDefinicion,
+} from '../src/territorios.js';
 
 const USO = `
 Uso: npm run generar -- <territorio.json> [opciones]
@@ -138,7 +143,8 @@ async function principal(argv) {
   // El relieve solo se registra si el territorio declara sus hojas. Un
   // territorio sin ellas se genera plano y lo dice en el informe, igual que
   // hasta ahora: es una degradacion, no un fallo.
-  const relieve = relieveDeDefinicion(await leerDefinicion(rutaTerritorio));
+  const definicion = await leerDefinicion(rutaTerritorio);
+  const relieve = relieveDeDefinicion(definicion);
   if (relieve !== null) {
     registro.registrar(
       crearProveedorRelievePnoa({
@@ -157,6 +163,7 @@ async function principal(argv) {
     territorio,
     registro,
     directorioSalida: opciones.salida,
+    umbralAguaMetros: umbralAguaDeDefinicion(definicion),
   });
 
   const rutaIndice = join(informe.directorioSalida, NOMBRE_INDICE);

@@ -27,6 +27,7 @@ const CLAVES_ADMITIDAS = Object.freeze([
   'ladoCeldaMetros',
   'notas',
   'relieve',
+  'umbralAguaMetros',
 ]);
 
 /** Las cuatro esquinas que define un area, en grados. */
@@ -127,6 +128,29 @@ export function territorioDesdeDefinicion(definicion) {
  * @param {object} definicion
  * @returns {{hojas: Array<{id: number|string, nombre: string}>, pasoMallaMetros?: number}|null}
  */
+/**
+ * A que cota deja de haber agua en ESTE territorio, si lo declara.
+ *
+ * Es saber LOCAL y por eso vive en el territorio y no en el dominio: depende de
+ * la altura de los muelles, de la marea y de si el sitio es un delta o un
+ * polder. Un numero afinado contra A Coruna ahogaria Rotterdam.
+ *
+ * @param {object} definicion
+ * @returns {number|null}
+ */
+export function umbralAguaDeDefinicion(definicion) {
+  const umbral = definicion?.umbralAguaMetros;
+  if (umbral === undefined || umbral === null) {
+    return null;
+  }
+  if (!Number.isFinite(umbral)) {
+    throw new TypeError(
+      `territorios: \`umbralAguaMetros\` debe ser un numero de metros, y es ${umbral}`,
+    );
+  }
+  return umbral;
+}
+
 export function relieveDeDefinicion(definicion) {
   const relieve = definicion?.relieve;
   if (relieve === undefined || relieve === null) {

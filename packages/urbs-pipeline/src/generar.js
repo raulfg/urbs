@@ -97,6 +97,7 @@ export async function generarCeldas({
   escribir = escribirEnDisco,
   margenMetros,
   pasoMallaMetros = PASO_MALLA_POR_DEFECTO,
+  umbralAguaMetros = null,
 }) {
   if (territorio === null || typeof territorio !== 'object' || typeof territorio.id !== 'string') {
     throw new TypeError(
@@ -183,6 +184,9 @@ export async function generarCeldas({
       epsg: territorio.epsg,
       ladoCeldaMetros,
       area,
+      // A que cota deja de haber agua AQUI. Lo declara el territorio porque es
+      // saber local: depende de los muelles, de la marea y del tipo de costa.
+      umbralAguaMetros,
     }),
     directorioSalida: directorioTerritorio,
     margenMetros: margen,

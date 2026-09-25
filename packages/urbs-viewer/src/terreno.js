@@ -205,3 +205,68 @@ export function alturasParaRapier(relieve, nivelSinDato = 0) {
   }
   return alturas;
 }
+
+/** Metros que un puente deja libres sobre lo que cruza. */
+export const RESGUARDO_PUENTE = 1.2;
+
+/**
+ * Cotas del tablero de un puente, vertice a vertice.
+ *
+ * Un puente NO sigue el terreno: lo salva. Si se muestreara como una calle a
+ * rasante quedaria pegado al fondo de la ria o del valle que cruza, y en las
+ * entradas a la ciudad eso se ve al instante — y ademas se conduce por dentro.
+ *
+ * El tablero se traza como una RAMPA entre las cotas de sus dos extremos, que
+ * es donde el puente de verdad se apoya, y luego se sube en bloque lo justo
+ * para que en ningun punto baje de `RESGUARDO_PUENTE` sobre el terreno. Asi la
+ * rampa se conserva —un puente que sube, sube— pero no se hunde en nada.
+ *
+ * Es deliberadamente tosco: no hay pilas, ni peralte, ni perfil de tablero. Lo
+ * que importa ahora es que no atraviese lo que cruza.
+ *
+ * @param {Float32Array} eje  Pares [este, norte] locales, ya limpios
+ * @param {Object} relieve
+ * @returns {Float32Array}  Una cota por vertice
+ */
+export function cotasDePuente(eje, relieve) {
+  const vertices = eje.length / 2;
+  const cotas = new Float32Array(vertices);
+  if (vertices === 0) {
+    return cotas;
+  }
+
+  const enSuelo = new Float32Array(vertices);
+  for (let i = 0; i < vertices; i += 1) {
+    enSuelo[i] = cotaEnCelda(relieve, eje[i * 2], eje[i * 2 + 1]) ?? 0;
+  }
+  if (vertices === 1) {
+    cotas[0] = enSuelo[0] + RESGUARDO_PUENTE;
+    return cotas;
+  }
+
+  // Recorrido acumulado, para que la rampa reparta por distancia y no por
+  // numero de vertices: un tramo con vertices apinados en un extremo saldria
+  // torcido si se repartiera por indice.
+  const recorrido = new Float32Array(vertices);
+  for (let i = 1; i < vertices; i += 1) {
+    recorrido[i] =
+      recorrido[i - 1] +
+      Math.hypot(eje[i * 2] - eje[(i - 1) * 2], eje[i * 2 + 1] - eje[(i - 1) * 2 + 1]);
+  }
+  const total = recorrido[vertices - 1];
+
+  const inicio = enSuelo[0];
+  const fin = enSuelo[vertices - 1];
+  let subida = 0;
+  for (let i = 0; i < vertices; i += 1) {
+    const t = total === 0 ? 0 : recorrido[i] / total;
+    cotas[i] = inicio + (fin - inicio) * t;
+    // Cuanto habria que subir el tablero entero para librar AQUI.
+    subida = Math.max(subida, enSuelo[i] + RESGUARDO_PUENTE - cotas[i]);
+  }
+  for (let i = 0; i < vertices; i += 1) {
+    cotas[i] += subida;
+  }
+
+  return cotas;
+}

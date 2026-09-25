@@ -22,7 +22,7 @@ import {
 } from '../src/camara-persecucion.js';
 import { COLOR_POR_CONFIANZA } from '../src/geometria.js';
 import { puntosDeSalida } from '../src/calzada.js';
-import { cotaEnCelda } from '../src/terreno.js';
+import { COLOR_AGUA, cotaEnCelda } from '../src/terreno.js';
 import { ALTO, ALTURA_REPOSO, ANCHO, LARGO, crearCoche } from './coche.js';
 import { crearGestorDeCeldas } from './gestor-celdas.js';
 import { crearGestorDeColisiones } from './gestor-colisiones.js';
@@ -272,12 +272,16 @@ async function arrancar() {
   // ademas trae el mar puesto —el MDT lo da como cota baja y se pinta distinto—.
   // Lo unico que queda plano es el respaldo de mas alla del radio de carga, y
   // de eso se encarga la niebla.
+  // Respaldo de mas alla del radio de carga. Va al NIVEL DEL MAR y con color de
+  // agua: en una ciudad costera lo que hay pasado el horizonte de celdas es
+  // oceano, asi que el respaldo cuenta la verdad en vez de tapar un agujero. Un
+  // poco por debajo de la cota del agua de las celdas, para no pelearse con ella.
   const suelo = new THREE.Mesh(
     new THREE.PlaneGeometry(RADIOS.render * 4, RADIOS.render * 4),
-    new THREE.MeshLambertMaterial({ color: 0x28323e }),
+    new THREE.MeshLambertMaterial({ color: new THREE.Color(...COLOR_AGUA) }),
   );
   suelo.rotation.x = -Math.PI / 2;
-  suelo.position.y = -2;
+  suelo.position.y = -0.5;
   escena.add(suelo);
 
   escena.add(new THREE.HemisphereLight(0xbfd4ff, 0x2b2a28, 2.1));

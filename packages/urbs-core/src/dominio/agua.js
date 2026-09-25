@@ -30,13 +30,19 @@
 import { SIN_DATO } from './elevacion.js';
 
 /**
- * Umbral por defecto, en metros.
+ * Umbral de reserva, en metros. NO es una calibracion: es un ultimo recurso.
  *
- * No es cero a secas: hay hojas donde el mar vuelve como ruido de hasta metro y
- * medio. Pero tampoco puede subir mucho, porque los muelles de A Coruna estan a
- * 3-4 m y se los comeria.
+ * EL VALOR BUENO LO DECLARA EL TERRITORIO, no este paquete. La regla fundacional
+ * de `urbs-core` es que nunca sabe de que pais come, y "a que cota deja de haber
+ * agua" es justo el tipo de saber local que la rompe: depende de la altura de
+ * los muelles, de si hay marea, de si es un delta o un polder. Un numero
+ * afinado contra los muelles de A Coruna ahogaria Rotterdam.
+ *
+ * Se deja un cero conservador para que la funcion siga siendo usable suelta y
+ * para que, si alguien se olvida de declararlo, el fallo sea "falta agua" —
+ * visible al instante— y no "sobra agua", que inunda calles sin avisar.
  */
-export const UMBRAL_AGUA_POR_DEFECTO = 1.5;
+export const UMBRAL_AGUA_DE_RESERVA = 0;
 
 /**
  * Máscara de agua de una malla de elevación.
@@ -48,7 +54,7 @@ export const UMBRAL_AGUA_POR_DEFECTO = 1.5;
  * @returns {{mascara: Uint8Array, pixelesDeAgua: number}}
  */
 export function mascaraDeAguaPorUmbral(malla, opciones = {}) {
-  const { umbral = UMBRAL_AGUA_POR_DEFECTO, soloDesdeElBorde = true } = opciones;
+  const { umbral = UMBRAL_AGUA_DE_RESERVA, soloDesdeElBorde = true } = opciones;
 
   if (!Number.isFinite(umbral)) {
     throw new RangeError(

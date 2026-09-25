@@ -44,7 +44,7 @@ export {
   exigirCoordenadasLocales,
 } from './src/dominio/celda.js';
 export { SIN_DATO, crearMallaElevacion, hayDato } from './src/dominio/elevacion.js';
-export { UMBRAL_AGUA_POR_DEFECTO, mascaraDeAguaPorUmbral } from './src/dominio/agua.js';
+export { UMBRAL_AGUA_DE_RESERVA, mascaraDeAguaPorUmbral } from './src/dominio/agua.js';
 export {
   MAGIA_URBSCELL,
   VERSION_FORMATO,

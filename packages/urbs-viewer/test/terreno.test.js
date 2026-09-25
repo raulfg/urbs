@@ -5,7 +5,9 @@ import {
   COLOR_AGUA,
   COLOR_TIERRA,
   SIN_DATO_RELIEVE,
+  RESGUARDO_PUENTE,
   alturasParaRapier,
+  cotasDePuente,
   construirTerrenoDeCelda,
   cotaEnCelda,
 } from '../src/terreno.js';
@@ -169,4 +171,58 @@ test('un hueco sin dato entra en el campo de alturas como una cota, no como NaN'
 
   for (const altura of alturas) assert.ok(Number.isFinite(altura));
   assert.equal(alturas[0], 1.5);
+});
+
+// --- Puentes
+
+test('un puente NO sigue el terreno: traza una rampa entre sus extremos', () => {
+  // Muestrearlo como una calle lo pegaria al fondo de lo que cruza. En la
+  // Avenida Alcalde Alfonso Molina, que es por donde se entra a A Coruna, eso
+  // se ve al instante y ademas se conduce por dentro del terraplen.
+  const { relieve } = relieveDe([20, 0, 0, 20, 20, 0, 0, 20, 20, 0, 0, 20, 20, 0, 0, 20], 10);
+  // Eje que cruza el valle de oeste a este por el medio.
+  const eje = Float32Array.from([0, 15, 10, 15, 20, 15, 30, 15]);
+  const cotas = cotasDePuente(eje, relieve);
+
+  // En el centro el terreno baja a cero; el tablero NO puede bajar con el.
+  const centro = cotas[1];
+  const suelo = cotaEnCelda(relieve, eje[2], eje[3]);
+  assert.ok(centro > suelo + 1, `el tablero (${centro}) deberia volar sobre el suelo (${suelo})`);
+});
+
+test('el tablero deja resguardo sobre TODO lo que cruza, no solo sobre el centro', () => {
+  const { relieve } = relieveDe([0, 0, 0, 0, 50, 0, 0, 0, 0], 10);
+  const eje = Float32Array.from([0, 10, 10, 10, 20, 10]);
+  const cotas = cotasDePuente(eje, relieve);
+
+  for (let i = 0; i < cotas.length; i += 1) {
+    const suelo = cotaEnCelda(relieve, eje[i * 2], eje[i * 2 + 1]) ?? 0;
+    assert.ok(cotas[i] >= suelo + RESGUARDO_PUENTE - 1e-3, `vertice ${i}: ${cotas[i]} sobre ${suelo}`);
+  }
+});
+
+test('un puente que sube sigue subiendo: la rampa no se aplana', () => {
+  const { relieve } = relieveDe([0, 10, 20, 0, 10, 20, 0, 10, 20], 10);
+  const eje = Float32Array.from([0, 10, 10, 10, 20, 10]);
+  const cotas = cotasDePuente(eje, relieve);
+
+  assert.ok(cotas[2] > cotas[0], 'el extremo alto tiene que quedar por encima del bajo');
+});
+
+test('la rampa reparte por DISTANCIA, no por numero de vertices', () => {
+  // Con los vertices apinados en un extremo, repartir por indice torceria el
+  // tablero.
+  const { relieve } = relieveDe([0, 0, 0, 0, 0, 0, 0, 0, 0], 10);
+  const eje = Float32Array.from([0, 10, 1, 10, 2, 10, 20, 10]);
+  const cotas = cotasDePuente(eje, relieve);
+
+  // Con el suelo llano la rampa es plana, pero el reparto se ve en que los
+  // tres primeros vertices estan casi a la misma cota que el primero.
+  assert.ok(Math.abs(cotas[1] - cotas[0]) < 1e-3);
+  assert.ok(Math.abs(cotas[2] - cotas[0]) < 1e-3);
+});
+
+test('un eje vacio no revienta', () => {
+  const { relieve } = relieveDe([0, 0, 0, 0], 10);
+  assert.equal(cotasDePuente(new Float32Array(0), relieve).length, 0);
 });

@@ -7,11 +7,15 @@
     "lonMax": -8.383,
     "latMax": 43.393
   },
-  "ladoCeldaMetros": 250,
   "relieve": {
     "hojas": [
-      { "id": 10323766, "nombre": "MDT02-ETRS89-HU29-0021-3-COB2" }
+      {
+        "id": 10323766,
+        "nombre": "MDT02-ETRS89-HU29-0021-3-COB2"
+      }
     ]
   },
-  "notas": "La peninsula entera de A Coruna: la Torre de Hercules en el extremo norte, el Orzan, Riazor, la Ciudad Vieja, la Marina y el ensanche hasta la entrada por Los Castros. Unos 3,4 x 4,2 km. Se anade porque el slice del casco historico no incluia ningun hito reconocible y resultaba dificil orientarse; este si. Mismo pipeline y mismo lado de celda: solo cambian las cuatro esquinas."
+  "ladoCeldaMetros": 250,
+  "umbralAguaMetros": 1.5,
+  "notas": "La peninsula entera de A Coruna: la Torre de Hercules en el extremo norte, el Orzan, Riazor, la Ciudad Vieja, la Marina y el ensanche hasta la entrada por Los Castros. Unos 3,4 x 4,2 km. Se anade porque el slice del casco historico no incluia ningun hito reconocible y resultaba dificil orientarse; este si. Mismo pipeline y mismo lado de celda: solo cambian las cuatro esquinas. El umbral de agua son 1,5 m y es saber LOCAL, por eso vive aqui y no en el motor: por abajo lo fija el ruido con que vuelve el mar en el MDT02 —en este territorio solo 7 postes de 108.160 bajan de cero, pero el 13% cae en la banda 0-1 m—, y por arriba lo fijan los muelles de A Coruna, que estan a 3-4 m y no pueden inundarse. Otro sitio necesita otro numero: un delta o un polder rompen este."
 }

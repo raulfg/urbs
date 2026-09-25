@@ -20,7 +20,7 @@ import earcut from 'earcut';
 import { ALTURA_PLANTA_POR_DEFECTO, Confianza } from 'urbs-core';
 
 import { bordesDeCalzada } from './calzada.js';
-import { cotaEnCelda } from './terreno.js';
+import { cotaEnCelda, cotasDePuente } from './terreno.js';
 
 /**
  * Altura de un edificio del que no se sabe nada. Ni cero —seria un poligono
@@ -47,6 +47,15 @@ export const COLOR_DESCONOCIDO = Object.freeze([0.6, 0.6, 0.6]);
 
 /** El viario no lleva color por procedencia: es el suelo, no el sujeto. */
 export const COLOR_VIARIO = Object.freeze([0.3, 0.3, 0.32]);
+
+/**
+ * Estructuras, en el orden en que viajan en la celda. Es el mismo orden que
+ * fija el formato: cambiarlo reinterpreta archivos ya escritos.
+ */
+const ESTRUCTURA_RASANTE = 'rasante';
+const ESTRUCTURA_PUENTE = 'puente';
+const ESTRUCTURA_TUNEL = 'tunel';
+const ESTRUCTURAS = Object.freeze([ESTRUCTURA_RASANTE, ESTRUCTURA_PUENTE, ESTRUCTURA_TUNEL]);
 
 /**
  * Zocalo de un edificio, derivado y no elegido.
@@ -312,7 +321,7 @@ function extruirEdificio(malla, anillos, altura, color, base = 0) {
  * @param {number} anchura
  * @returns {void}
  */
-function tenderCalzada(malla, eje, anchura, relieve = null) {
+function tenderCalzada(malla, eje, anchura, relieve = null, estructura = ESTRUCTURA_RASANTE) {
   // El dato real puede traer una anchura invalida en un tramo suelto. Perder
   // ese tramo es mejor que perder la celda entera, que es lo que pasaria si se
   // dejara subir el RangeError.
@@ -320,7 +329,14 @@ function tenderCalzada(malla, eje, anchura, relieve = null) {
     return;
   }
 
-  const { derecha, izquierda } = bordesDeCalzada(eje, anchura);
+  // Un tunel no forma parte de la superficie visible. Dibujarlo pegado al
+  // terreno, que es lo que hacia hasta ahora, deja la boca enterrada y la
+  // calzada pintada por encima del monte que atraviesa.
+  if (estructura === ESTRUCTURA_TUNEL) {
+    return;
+  }
+
+  const { derecha, izquierda, eje: ejeLimpio } = bordesDeCalzada(eje, anchura);
   const vertices = derecha.length / 2;
   if (vertices < 2) {
     return;
@@ -331,18 +347,25 @@ function tenderCalzada(malla, eje, anchura, relieve = null) {
   // preprocesado dejaria la calle flotando o hundida respecto a lo que se ve,
   // con luz por debajo a lo largo de toda la calle — y un edificio disimula ese
   // desfase tras sus paredes, pero una calle no puede.
-  const cotaDeBorde = (x, z) => (relieve === null ? 0 : cotaEnCelda(relieve, x, z) ?? 0) + ALTURA_VIARIO;
+  // Un puente traza una rampa entre sus extremos en vez de seguir el terreno.
+  const tablero =
+    estructura === ESTRUCTURA_PUENTE && relieve !== null ? cotasDePuente(ejeLimpio, relieve) : null;
+
+  const cotaDeBorde = (indice, x, z) => {
+    if (tablero !== null) return tablero[indice] + ALTURA_VIARIO;
+    return (relieve === null ? 0 : cotaEnCelda(relieve, x, z) ?? 0) + ALTURA_VIARIO;
+  };
 
   let derechaAnterior = malla.vertice(
     derecha[0],
-    cotaDeBorde(derecha[0], derecha[1]),
+    cotaDeBorde(0, derecha[0], derecha[1]),
     -derecha[1],
     ARRIBA,
     COLOR_VIARIO,
   );
   let izquierdaAnterior = malla.vertice(
     izquierda[0],
-    cotaDeBorde(izquierda[0], izquierda[1]),
+    cotaDeBorde(0, izquierda[0], izquierda[1]),
     -izquierda[1],
     ARRIBA,
     COLOR_VIARIO,
@@ -351,14 +374,14 @@ function tenderCalzada(malla, eje, anchura, relieve = null) {
   for (let i = 1; i < vertices; i += 1) {
     const d = malla.vertice(
       derecha[i * 2],
-      cotaDeBorde(derecha[i * 2], derecha[i * 2 + 1]),
+      cotaDeBorde(i, derecha[i * 2], derecha[i * 2 + 1]),
       -derecha[i * 2 + 1],
       ARRIBA,
       COLOR_VIARIO,
     );
     const z = malla.vertice(
       izquierda[i * 2],
-      cotaDeBorde(izquierda[i * 2], izquierda[i * 2 + 1]),
+      cotaDeBorde(i, izquierda[i * 2], izquierda[i * 2 + 1]),
       -izquierda[i * 2 + 1],
       ARRIBA,
       COLOR_VIARIO,
@@ -424,7 +447,13 @@ export function construirGeometriaDeCelda(vistas) {
   for (let i = 0; i < cabecera.numeroTramos; i += 1) {
     const desde = tramos.inicioVertice[i] * 2;
     const hasta = tramos.inicioVertice[i + 1] * 2;
-    tenderCalzada(malla, tramos.vertices.subarray(desde, hasta), tramos.anchura[i], relieve);
+    tenderCalzada(
+      malla,
+      tramos.vertices.subarray(desde, hasta),
+      tramos.anchura[i],
+      relieve,
+      ESTRUCTURAS[tramos.estructura[i]] ?? ESTRUCTURA_RASANTE,
+    );
   }
 
   return {

@@ -15,7 +15,7 @@
 
 import * as THREE from 'three';
 
-import { vistasDeCelda } from 'urbs-core';
+import { UMBRAL_AGUA_DE_RESERVA, vistasDeCelda } from 'urbs-core';
 
 import { construirGeometriaDeCelda } from '../src/geometria.js';
 import { construirTerrenoDeCelda } from '../src/terreno.js';
@@ -33,6 +33,10 @@ import { celdasEnRadio, planDeCarga } from '../src/streaming.js';
  * @param {number} datos.radioMetros
  */
 export function crearGestorDeCeldas({ escena, indice, base, origen, radioMetros }) {
+  // El umbral de agua lo declara el TERRITORIO, no el motor: depende de la
+  // altura de los muelles y del tipo de costa. Si no lo declara, el de reserva
+  // deja de pintar agua en vez de inundar calles.
+  const umbralAgua = indice.territorio.umbralAguaMetros ?? UMBRAL_AGUA_DE_RESERVA;
   const { ladoCeldaMetros } = indice.territorio;
 
   // Un solo material para toda la ciudad. El color por confianza viaja en el
@@ -79,7 +83,7 @@ export function crearGestorDeCeldas({ escena, indice, base, origen, radioMetros 
     // El terreno va en su propia malla y no mezclado con edificios y calzada:
     // es la unica superficie que puede existir sin que haya nada encima, y
     // separarla deja la puerta abierta a darle su propio material.
-    const terreno = construirTerrenoDeCelda(vistas);
+    const terreno = construirTerrenoDeCelda(vistas, { umbralAgua });
 
     const objeto = new THREE.Mesh(geometria, material);
     referenciasAlMaterial += 1;
