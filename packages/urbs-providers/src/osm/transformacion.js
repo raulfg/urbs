@@ -24,6 +24,8 @@ import {
   tipoDeVia,
   esConducible,
   esHighwayIgnorado,
+  estructuraDeVia,
+  nivelDeVia,
   usoDeEdificio,
   derivarAltura,
   resolverAnchuraOsm,
@@ -231,6 +233,10 @@ export function transformarViario(respuesta, { proveedorId, soloConducibles = fa
         carriles: anchura.carriles,
         sentidoUnico: etiquetas.oneway === 'yes' || etiquetas.oneway === '-1',
         nombre: etiquetas.name ?? null,
+        // Sin esto, en cuanto haya relieve cada puente se hunde en lo que
+        // cruza y cada boca de tunel queda enterrada.
+        estructura: estructuraDeVia(etiquetas),
+        nivel: nivelDeVia(etiquetas),
         procedencia: crearProcedencia({
           proveedor: proveedorId,
           confianza: anchura.confianza,

@@ -12,6 +12,8 @@
 
 import {
   Confianza,
+  Estructura,
+  NIVEL_MAXIMO,
   TipoVia,
   UsoEdificio,
   ALTURA_PLANTA_POR_DEFECTO,
@@ -641,4 +643,62 @@ function leerCarriles(etiquetas, rechazos) {
   }
 
   return carriles;
+}
+
+/**
+ * Valores de `tunnel` que NO son un tunel de verdad.
+ *
+ * `building_passage` es una calle que pasa por debajo de un edificio: los
+ * soportales del casco viejo. Va a RASANTE, se conduce y se ve. En el slice
+ * medido son 53 de los 81 `tunnel`, o sea la mayoria: tratarlos como tunel
+ * borraria cincuenta y tres calles de Ciudad Vieja.
+ */
+const TUNELES_FALSOS = new Set(['building_passage', 'no']);
+
+/** Valores que en OSM significan "no". */
+const NEGACIONES = new Set(['no', 'false', '0']);
+
+/**
+ * Como se apoya un vial respecto al terreno, segun sus etiquetas.
+ *
+ * Importa en cuanto hay relieve: un vial a rasante muestrea el terreno vertice
+ * a vertice, y hacer eso con un puente lo pega al fondo de lo que cruza.
+ *
+ * @param {Record<string, string>} etiquetas
+ * @returns {string} Un valor de `Estructura`
+ */
+export function estructuraDeVia(etiquetas = {}) {
+  const puente = etiquetas.bridge;
+  if (typeof puente === 'string' && puente.length > 0 && !NEGACIONES.has(puente)) {
+    return Estructura.PUENTE;
+  }
+
+  const tunel = etiquetas.tunnel;
+  if (typeof tunel === 'string' && tunel.length > 0 && !TUNELES_FALSOS.has(tunel) && !NEGACIONES.has(tunel)) {
+    return Estructura.TUNEL;
+  }
+
+  return Estructura.RASANTE;
+}
+
+/**
+ * Nivel de cruce de un vial, de su etiqueta `layer`.
+ *
+ * Se recorta al tope del dominio en vez de dejarlo pasar: un `layer` de tres
+ * cifras es un error de etiquetado, y si llegara crudo `crearTramo` rechazaria
+ * el tramo entero por culpa de un numero que nadie se ha creido nunca.
+ *
+ * @param {Record<string, string>} etiquetas
+ * @returns {number}
+ */
+export function nivelDeVia(etiquetas = {}) {
+  const bruto = etiquetas.layer;
+  if (typeof bruto !== 'string' || !/^[+-]?\d+$/.test(bruto.trim())) {
+    return 0;
+  }
+  const nivel = Number.parseInt(bruto, 10);
+  if (!Number.isInteger(nivel)) {
+    return 0;
+  }
+  return Math.max(-NIVEL_MAXIMO, Math.min(NIVEL_MAXIMO, nivel));
 }

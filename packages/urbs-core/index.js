@@ -14,6 +14,8 @@ export {
   ALTURA_PLANTA_POR_DEFECTO,
 } from './src/dominio/edificio.js';
 export {
+  Estructura,
+  NIVEL_MAXIMO,
   TipoVia,
   crearTramo,
   resolverAnchura,

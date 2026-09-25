@@ -23,6 +23,37 @@ export const TipoVia = Object.freeze({
 const TIPOS_VALIDOS = new Set(Object.values(TipoVia));
 
 /**
+ * Como se apoya un vial respecto al terreno.
+ *
+ * No es un adorno para el render: es la diferencia entre una ciudad que se
+ * puede conducir y una en la que te metes dentro de un puente. En cuanto haya
+ * relieve, un vial a rasante muestrea el terreno vertice a vertice; hacer eso
+ * con un puente lo pega al fondo de lo que cruza, y con un tunel entierra la
+ * boca. Medido en el slice: 5.300 viales, 24 puentes y 81 tuneles.
+ *
+ * Es UN valor y no dos banderas porque un tramo no puede ser puente y tunel a
+ * la vez, y quien dibuja necesita decidir con una sola pregunta.
+ */
+export const Estructura = Object.freeze({
+  /** Sigue el terreno. La inmensa mayoria. */
+  RASANTE: 'rasante',
+  /** Salva un hueco: su cota se interpola entre los extremos, no se muestrea. */
+  PUENTE: 'puente',
+  /** Va por debajo. No forma parte de la superficie visible. */
+  TUNEL: 'tunel',
+});
+
+const ESTRUCTURAS_VALIDAS = new Set(Object.values(Estructura));
+
+/**
+ * Tope de niveles admitidos, en valor absoluto.
+ *
+ * El maximo real medido en el slice es 5, y el minimo -2. Un `layer` de tres
+ * cifras es un error de etiquetado, no un rascacielos de viaductos.
+ */
+export const NIVEL_MAXIMO = 10;
+
+/**
  * Anchura estimada en metros cuando la fuente no declara `width`.
  * Se usa solo como ultimo recurso: primero `width`, luego `lanes`, y si no,
  * esta tabla.
@@ -64,6 +95,8 @@ export function crearTramo({
   carriles = null,
   sentidoUnico = false,
   nombre = null,
+  estructura = Estructura.RASANTE,
+  nivel = 0,
   procedencia,
 }) {
   if (typeof id !== 'string' || id.length === 0) {
@@ -78,6 +111,16 @@ export function crearTramo({
   if (!(Number.isFinite(anchuraMetros) && anchuraMetros > 0)) {
     throw new RangeError('crearTramo: `anchuraMetros` debe ser un numero positivo');
   }
+  if (!ESTRUCTURAS_VALIDAS.has(estructura)) {
+    throw new RangeError(
+      `crearTramo: estructura desconocida "${estructura}"; son ${[...ESTRUCTURAS_VALIDAS].join(', ')}`,
+    );
+  }
+  if (!Number.isInteger(nivel) || Math.abs(nivel) > NIVEL_MAXIMO) {
+    throw new RangeError(
+      `crearTramo: el \`nivel\` debe ser un entero entre -${NIVEL_MAXIMO} y ${NIVEL_MAXIMO}, y es ${nivel}`,
+    );
+  }
   if (!procedencia) {
     throw new TypeError('crearTramo: todo tramo debe declarar su procedencia');
   }
@@ -90,6 +133,8 @@ export function crearTramo({
     carriles,
     sentidoUnico,
     nombre,
+    estructura,
+    nivel,
     procedencia,
   });
 }
