@@ -17,6 +17,8 @@ import {
   ALTURA_VIARIO,
   COLOR_POR_CONFIANZA,
   alturaDeEdificio,
+  COLOR_ACERA,
+  COLOR_VIARIO,
   construirGeometriaDeCelda,
   firmeDeAcera,
   firmeDeCalzada,
@@ -548,4 +550,31 @@ test('quien decide si es calzada es el predicado del dominio, no una lista apart
       `${tipo} se pinto del firme que no era`,
     );
   }
+});
+
+/** Luminancia percibida de un color lineal. */
+function luminancia([r, g, b]) {
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+test('el asfalto es GRIS OSCURO, no un lavanda de tono medio', () => {
+  // Medido en el navegador con las luces de verdad de la escena: el asfalto de
+  // antes, [0,3 0,3 0,32], salia por pantalla como rgb(129,133,150). Un gris
+  // azulado de tono medio, mas claro que el propio terreno —rgb(158,155,150)—
+  // y por eso la calle no se leia como una linea oscura sino como una mancha
+  // mas del suelo. El hemisferico va a 2,1 con cielo 0xbfd4ff: multiplica por
+  // (1,57 1,75 2,10), asi que cualquier albedo neutro sale azul y claro.
+  const asfalto = COLOR_VIARIO;
+  const acera = COLOR_ACERA;
+
+  assert.ok(
+    luminancia(asfalto) < luminancia(acera) * 0.4,
+    `el asfalto (${luminancia(asfalto).toFixed(3)}) tiene que ser mucho mas oscuro que la acera (${luminancia(acera).toFixed(3)})`,
+  );
+});
+
+test('el asfalto no tira a azul: la luz del cielo ya lo azulea sola', () => {
+  // Si ademas el albedo es azul, la calle acaba del color del mar. El albedo
+  // va ligeramente CALIDO para compensar el cielo y salir neutro en pantalla.
+  assert.ok(COLOR_VIARIO[0] >= COLOR_VIARIO[2], `salio ${COLOR_VIARIO.join(', ')}`);
 });

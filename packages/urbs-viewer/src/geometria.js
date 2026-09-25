@@ -54,8 +54,20 @@ export const COLOR_POR_CONFIANZA = Object.freeze({
 /** Para una confianza que no este en la tabla: gris, visible y evidente. */
 export const COLOR_DESCONOCIDO = Object.freeze([0.6, 0.6, 0.6]);
 
-/** El viario no lleva color por procedencia: es el suelo, no el sujeto. */
-export const COLOR_VIARIO = Object.freeze([0.3, 0.3, 0.32]);
+/**
+ * El viario no lleva color por procedencia: es el suelo, no el sujeto.
+ *
+ * Y va OSCURO, mas de lo que parece razonable escribiendolo. El hemisferico de
+ * la escena va a 2,1 con cielo 0xbfd4ff, o sea que multiplica cualquier albedo
+ * por (1,57 1,75 2,10): lo neutro sale azul y lo medio sale claro. Medido en el
+ * navegador con las luces de verdad, el asfalto anterior —[0,3 0,3 0,32]— salia
+ * por pantalla como rgb(129,133,150), un lavanda de tono medio MAS CLARO que el
+ * propio terreno, rgb(158,155,150). La calle no se leia como una linea oscura,
+ * se leia como una mancha mas del suelo. Esto sale como rgb(80,80,84).
+ *
+ * El albedo tira a calido a proposito, para compensar el cielo y salir neutro.
+ */
+export const COLOR_VIARIO = Object.freeze([0.11, 0.105, 0.095]);
 
 /**
  * Firme de la acera: granito claro, el de la ciudad que se esta copiando.
