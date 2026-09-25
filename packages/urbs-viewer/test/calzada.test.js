@@ -369,3 +369,53 @@ test('sin viario utilizable no hay candidatos, y eso no es un error', () => {
     null,
   );
 });
+
+test('el coche NO sale en una plaza peatonal aunque sea lo mas ancho de la celda', () => {
+  // Medido sobre el slice: ordenando solo por anchura, el mejor candidato NO
+  // era conducible en el 45% de las celdas. Las peatonales del dato llegan a
+  // 18 m —una plaza— y ninguna calle de verdad pasa de 15, asi que la plaza
+  // ganaba siempre. El coche nacia en medio de una plaza o de un callejon.
+  const candidatos = puntosDeSalida({
+    cabecera: { numeroTramos: 2 },
+    tramos: {
+      inicioVertice: Uint32Array.from([0, 2, 4]),
+      vertices: Float32Array.from([0, 0, 0, 200, 10, 0, 10, 200]),
+      anchura: Float32Array.from([18, 6]),
+      tipo: Uint8Array.from([0, 1]),
+    },
+    diccionarios: { tiposVia: ['peatonal', 'residencial'] },
+  });
+
+  assert.equal(candidatos[0].anchura, 6, 'gana la calle estrecha, no la plaza ancha');
+  assert.equal(candidatos[1].anchura, 18, 'pero la plaza sigue ahi por si la calle esta ocupada');
+});
+
+test('entre conducibles sigue mandando la anchura', () => {
+  const candidatos = puntosDeSalida({
+    cabecera: { numeroTramos: 2 },
+    tramos: {
+      inicioVertice: Uint32Array.from([0, 2, 4]),
+      vertices: Float32Array.from([0, 0, 0, 200, 10, 0, 10, 200]),
+      anchura: Float32Array.from([6, 12]),
+      tipo: Uint8Array.from([0, 0]),
+    },
+    diccionarios: { tiposVia: ['residencial'] },
+  });
+
+  assert.equal(candidatos[0].anchura, 12);
+});
+
+test('una celda solo peatonal sigue dando candidatos: peor sitio es mejor que ninguno', () => {
+  const candidatos = puntosDeSalida({
+    cabecera: { numeroTramos: 1 },
+    tramos: {
+      inicioVertice: Uint32Array.from([0, 2]),
+      vertices: Float32Array.from([0, 0, 0, 200]),
+      anchura: Float32Array.from([18]),
+      tipo: Uint8Array.from([0]),
+    },
+    diccionarios: { tiposVia: ['peatonal'] },
+  });
+
+  assert.equal(candidatos.length, 1);
+});

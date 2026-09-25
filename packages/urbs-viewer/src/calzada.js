@@ -16,6 +16,8 @@
  * Quien la use decide a que altura la pone y con que devanado la triangula.
  */
 
+import { esTipoConducible } from 'urbs-core';
+
 /**
  * Cuanto puede alargarse un inglete, en multiplos de la semianchura.
  *
@@ -227,7 +229,15 @@ export const LARGO_MINIMO_SALIDA = 15;
  * un edificio una de cada dos veces, y un coche que aparece dentro de un casco
  * convexo sale disparado o se queda encajado.
  *
- * Se ordena por ANCHURA y no por longitud, y eso se aprendio mirando: con el
+ * Manda primero si por el tramo PASA UN COCHE, y lo decide `esTipoConducible`,
+ * del dominio, el mismo que usa el render. Ordenando solo por anchura, el mejor
+ * candidato no era conducible en el 45% de las celdas del slice: las peatonales
+ * del dato llegan a 18 m —una plaza— y ninguna calle de verdad pasa de 15, asi
+ * que la plaza ganaba siempre y el coche nacia en medio de ella o de un
+ * callejon. Se ORDENA y no se filtra: una celda que solo tenga aceras sigue
+ * dando candidatos, porque el peor sitio es mejor que ninguno.
+ *
+ * Despues se ordena por ANCHURA y no por longitud, y eso se aprendio mirando: con el
  * tramo mas largo, el coche arrancaba, recorria seis metros y se clavaba contra
  * una fachada. En un casco medieval las calles largas son callejones de tres
  * metros, y ademas el colisionador de un edificio es su casco CONVEXO, que
@@ -245,13 +255,15 @@ export const LARGO_MINIMO_SALIDA = 15;
  * @returns {{x: number, z: number, guinada: number, anchura: number}|null}
  */
 export function puntosDeSalida(vistas) {
-  const { cabecera, tramos } = vistas;
+  const { cabecera, tramos, diccionarios } = vistas;
+  const tiposVia = diccionarios?.tiposVia;
   const candidatos = [];
 
   for (let i = 0; i < cabecera.numeroTramos; i += 1) {
     const desde = tramos.inicioVertice[i];
     const hasta = tramos.inicioVertice[i + 1];
     const anchura = tramos.anchura[i];
+    const conducible = esTipoConducible(tiposVia?.[tramos.tipo?.[i]]);
 
     for (let v = desde; v + 1 < hasta; v += 1) {
       const e1 = tramos.vertices[v * 2];
@@ -281,12 +293,15 @@ export function puntosDeSalida(vistas) {
         guinada: Math.atan2(-de, dn),
         anchura,
         largo,
+        conducible,
       });
     }
   }
 
-  // Mas ancho primero; a igual anchura, mas largo.
-  return candidatos.sort((a, b) => b.anchura - a.anchura || b.largo - a.largo);
+  // Conducible primero; luego mas ancho; a igual anchura, mas largo.
+  return candidatos.sort(
+    (a, b) => b.conducible - a.conducible || b.anchura - a.anchura || b.largo - a.largo,
+  );
 }
 
 /**
