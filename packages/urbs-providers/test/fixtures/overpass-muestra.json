@@ -1,0 +1,217 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.7",
+  "osm3s": {
+    "timestamp_osm_base": "2026-09-24T21:14:33Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+    {
+      "type": "way",
+      "id": 1,
+      "tags": { "building": "apartments", "building:levels": "5" },
+      "geometry": [
+        { "lat": 43.3700, "lon": -8.4000 },
+        { "lat": 43.3700, "lon": -8.3998 },
+        { "lat": 43.3702, "lon": -8.3998 },
+        { "lat": 43.3702, "lon": -8.4000 },
+        { "lat": 43.3700, "lon": -8.4000 }
+      ]
+    },
+    {
+      "type": "way",
+      "id": 2,
+      "tags": { "building": "yes", "height": "0.5", "building:levels": "4" },
+      "geometry": [
+        { "lat": 43.3710, "lon": -8.4000 },
+        { "lat": 43.3710, "lon": -8.3998 },
+        { "lat": 43.3712, "lon": -8.3998 },
+        { "lat": 43.3712, "lon": -8.4000 },
+        { "lat": 43.3710, "lon": -8.4000 }
+      ]
+    },
+    {
+      "type": "way",
+      "id": 3,
+      "tags": { "building": "church", "name": "Igrexa de Santiago" },
+      "geometry": [
+        { "lat": 43.3720, "lon": -8.4000 },
+        { "lat": 43.3720, "lon": -8.3998 },
+        { "lat": 43.3722, "lon": -8.3998 },
+        { "lat": 43.3722, "lon": -8.4000 },
+        { "lat": 43.3720, "lon": -8.4000 }
+      ]
+    },
+    {
+      "type": "way",
+      "id": 4,
+      "tags": { "building": "yes", "height": "18.5", "shop": "bakery" },
+      "geometry": [
+        { "lat": 43.3730, "lon": -8.4000 },
+        { "lat": 43.3730, "lon": -8.3998 },
+        { "lat": 43.3732, "lon": -8.3998 },
+        { "lat": 43.3732, "lon": -8.4000 },
+        { "lat": 43.3730, "lon": -8.4000 }
+      ]
+    },
+    {
+      "type": "way",
+      "id": 5,
+      "tags": { "building": "yes" },
+      "geometry": [
+        { "lat": 43.3740, "lon": -8.4000 },
+        { "lat": 43.3740, "lon": -8.3998 },
+        { "lat": 43.3740, "lon": -8.4000 }
+      ]
+    },
+    {
+      "type": "way",
+      "id": 10,
+      "geometry": [
+        { "lat": 43.3750, "lon": -8.4010 },
+        { "lat": 43.3750, "lon": -8.4000 },
+        { "lat": 43.3760, "lon": -8.4000 },
+        { "lat": 43.3760, "lon": -8.4010 },
+        { "lat": 43.3750, "lon": -8.4010 }
+      ]
+    },
+    {
+      "type": "way",
+      "id": 11,
+      "geometry": [
+        { "lat": 43.3753, "lon": -8.4007 },
+        { "lat": 43.3753, "lon": -8.4003 },
+        { "lat": 43.3757, "lon": -8.4003 },
+        { "lat": 43.3757, "lon": -8.4007 },
+        { "lat": 43.3753, "lon": -8.4007 }
+      ]
+    },
+    {
+      "type": "relation",
+      "id": 100,
+      "tags": { "type": "multipolygon", "building": "residential", "building:levels": "6" },
+      "members": [
+        {
+          "type": "way",
+          "ref": 10,
+          "role": "outer",
+          "geometry": [
+            { "lat": 43.3750, "lon": -8.4010 },
+            { "lat": 43.3750, "lon": -8.4000 },
+            { "lat": 43.3760, "lon": -8.4000 },
+            { "lat": 43.3760, "lon": -8.4010 },
+            { "lat": 43.3750, "lon": -8.4010 }
+          ]
+        },
+        {
+          "type": "way",
+          "ref": 11,
+          "role": "inner",
+          "geometry": [
+            { "lat": 43.3753, "lon": -8.4007 },
+            { "lat": 43.3753, "lon": -8.4003 },
+            { "lat": 43.3757, "lon": -8.4003 },
+            { "lat": 43.3757, "lon": -8.4007 },
+            { "lat": 43.3753, "lon": -8.4007 }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "way",
+      "id": 20,
+      "tags": { "highway": "residential", "name": "Rua Real", "width": "7.5", "oneway": "yes" },
+      "geometry": [
+        { "lat": 43.3680, "lon": -8.4020 },
+        { "lat": 43.3680, "lon": -8.4010 }
+      ]
+    },
+    {
+      "type": "way",
+      "id": 21,
+      "tags": { "highway": "primary", "name": "Avenida Inventada", "lanes": "4" },
+      "geometry": [
+        { "lat": 43.3681, "lon": -8.4020 },
+        { "lat": 43.3681, "lon": -8.4010 }
+      ]
+    },
+    {
+      "type": "way",
+      "id": 22,
+      "tags": { "highway": "residential" },
+      "geometry": [
+        { "lat": 43.3682, "lon": -8.4020 },
+        { "lat": 43.3682, "lon": -8.4010 }
+      ]
+    },
+    {
+      "type": "way",
+      "id": 23,
+      "tags": { "highway": "footway" },
+      "geometry": [
+        { "lat": 43.3683, "lon": -8.4020 },
+        { "lat": 43.3683, "lon": -8.4010 }
+      ]
+    },
+    {
+      "type": "way",
+      "id": 24,
+      "tags": { "highway": "steps" },
+      "geometry": [
+        { "lat": 43.3684, "lon": -8.4020 },
+        { "lat": 43.3684, "lon": -8.4010 }
+      ]
+    },
+    {
+      "type": "way",
+      "id": 25,
+      "tags": { "highway": "residential", "junction": "roundabout" },
+      "geometry": [
+        { "lat": 43.3690, "lon": -8.4020 },
+        { "lat": 43.3690, "lon": -8.4018 },
+        { "lat": 43.3692, "lon": -8.4018 },
+        { "lat": 43.3692, "lon": -8.4020 },
+        { "lat": 43.3690, "lon": -8.4020 }
+      ]
+    },
+    {
+      "type": "way",
+      "id": 26,
+      "tags": { "highway": "pedestrian", "area": "yes", "name": "Praza Inventada" },
+      "geometry": [
+        { "lat": 43.3695, "lon": -8.4020 },
+        { "lat": 43.3695, "lon": -8.4018 },
+        { "lat": 43.3697, "lon": -8.4018 },
+        { "lat": 43.3697, "lon": -8.4020 },
+        { "lat": 43.3695, "lon": -8.4020 }
+      ]
+    },
+    {
+      "type": "way",
+      "id": 27,
+      "tags": { "highway": "construction" },
+      "geometry": [
+        { "lat": 43.3685, "lon": -8.4020 },
+        { "lat": 43.3685, "lon": -8.4010 }
+      ]
+    },
+    {
+      "type": "way",
+      "id": 28,
+      "tags": { "highway": "inventado" },
+      "geometry": [
+        { "lat": 43.3686, "lon": -8.4020 },
+        { "lat": 43.3686, "lon": -8.4010 }
+      ]
+    },
+    {
+      "type": "way",
+      "id": 29,
+      "tags": { "highway": "service", "access": "no" },
+      "geometry": [
+        { "lat": 43.3687, "lon": -8.4020 },
+        { "lat": 43.3687, "lon": -8.4010 }
+      ]
+    }
+  ]
+}
