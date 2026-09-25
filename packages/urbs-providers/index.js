@@ -51,3 +51,15 @@ export {
   PLANTAS_MAXIMAS,
 } from './src/osm/etiquetas.js';
 
+
+export {
+  AGRUPACION_MDT,
+  CAMPO_DESCARGA,
+  SERIE_MDT02,
+  URL_CNIG_POR_DEFECTO,
+  crearDescargaCnig,
+  nombreDeHoja,
+} from './src/pnoa/cnig.js';
+
+export { MARGEN_VENTANA, noroesteDeVentana, ventanaDeCaja } from './src/pnoa/ventana.js';
+export { abrirHoja } from './src/pnoa/hoja.js';
