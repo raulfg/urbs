@@ -129,6 +129,89 @@ export function centroideDePolilinea(eje) {
 }
 
 /**
+ * Parte una polilinea en piezas que quepan en una celda mas su margen.
+ *
+ * Un `way` de OSM no tiene techo de longitud: el Paseo Maritimo de A Coruna
+ * son 2.212 m en un solo way. Guardado entero en la celda de su centroide,
+ * sus extremos caen a 1.100 m del ancla, mas alla del margen que el formato
+ * admite, y `codificarCelda` lo rechaza —con razon, porque a esa distancia el
+ * elemento ya no pertenece a esa celda ni al streaming de esa zona.
+ *
+ * La regla no es la longitud recorrida sino la EXTENSION: lo que amenaza a la
+ * precision es cuanto se aleja un vertice del ancla, no cuantos metros de
+ * asfalto hay por medio. Un paseo que va y vuelve dentro de una manzana cabe
+ * entero por largo que sea; una recta de dos kilometros no.
+ *
+ * Dos piezas consecutivas COMPARTEN el vertice de union, asi que la linea
+ * sigue siendo continua al recomponerla. Un segmento mas largo que el maximo
+ * se subdivide interpolando sobre su propia recta: interpolar sobre un
+ * segmento recto es exacto y no inventa geometria.
+ *
+ * @param {Array<[number, number]>} eje  En metros proyectados
+ * @param {number} extensionMaxima       Extension maxima por eje, en metros
+ * @returns {Array<Array<[number, number]>>}
+ */
+export function partirPolilinea(eje, extensionMaxima) {
+  const posiciones = validarPosiciones(eje, 2, 'partirPolilinea');
+  if (!(Number.isFinite(extensionMaxima) && extensionMaxima > 0)) {
+    throw new RangeError('partirPolilinea: `extensionMaxima` debe ser un numero positivo de metros');
+  }
+
+  // Paso 1: ningun segmento suelto puede superar el maximo, o no habria donde
+  // cortar sin interpolar.
+  /** @type {Array<[number, number]>} */
+  const densa = [posiciones[0]];
+  for (let i = 1; i < posiciones.length; i += 1) {
+    const [x1, y1] = posiciones[i - 1];
+    const [x2, y2] = posiciones[i];
+    const trozos = Math.ceil(Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1)) / extensionMaxima);
+    for (let t = 1; t <= trozos; t += 1) {
+      const razon = t / trozos;
+      densa.push(t === trozos ? [x2, y2] : [x1 + (x2 - x1) * razon, y1 + (y2 - y1) * razon]);
+    }
+  }
+
+  // Paso 2: acumular mientras la caja envolvente quepa. El centroide de una
+  // pieza cae siempre dentro de su caja, asi que acotar la caja acota tambien
+  // la distancia de cualquier vertice al ancla. Esa es la invariante que el
+  // formato exige.
+  const piezas = [];
+  let pieza = [densa[0]];
+  let esteMin = densa[0][0];
+  let esteMax = densa[0][0];
+  let norteMin = densa[0][1];
+  let norteMax = densa[0][1];
+
+  for (let i = 1; i < densa.length; i += 1) {
+    const [este, norte] = densa[i];
+    const cabe =
+      Math.max(esteMax, este) - Math.min(esteMin, este) <= extensionMaxima &&
+      Math.max(norteMax, norte) - Math.min(norteMin, norte) <= extensionMaxima;
+
+    if (!cabe) {
+      piezas.push(pieza);
+      // La nueva pieza arranca en el ultimo vertice de la anterior: sin ese
+      // vertice compartido quedaria un hueco visible en el mapa.
+      const union = pieza.at(-1);
+      pieza = [union];
+      esteMin = union[0];
+      esteMax = union[0];
+      norteMin = union[1];
+      norteMax = union[1];
+    }
+
+    pieza.push([este, norte]);
+    esteMin = Math.min(esteMin, este);
+    esteMax = Math.max(esteMax, este);
+    norteMin = Math.min(norteMin, norte);
+    norteMax = Math.max(norteMax, norte);
+  }
+  piezas.push(pieza);
+
+  return piezas;
+}
+
+/**
  * @param {Array<[number, number]>} posiciones  [lon, lat] en grados
  * @param {Reproyector} reproyector
  * @returns {Array<[number, number]>} [este, norte] en metros absolutos
@@ -245,21 +328,28 @@ export function trocear({
   }
 
   for (const tramo of tramos) {
-    const eje = proyectarPosiciones(tramo.eje, reproyector);
-    const centroide = centroideDePolilinea(eje);
-    const contenido = celdaPara(centroide);
+    const piezas = partirPolilinea(proyectarPosiciones(tramo.eje, reproyector), margen);
+    const partido = piezas.length > 1;
 
-    contenido.tramos.push({
-      id: tramo.id,
-      eje: localizarPosiciones(eje, contenido.celda),
-      ancla: aLocal(centroide, contenido.celda),
-      tipo: tramo.tipo,
-      anchuraMetros: tramo.anchuraMetros,
-      carriles: tramo.carriles,
-      sentidoUnico: tramo.sentidoUnico,
-      nombre: tramo.nombre,
-      procedencia: tramo.procedencia,
-    });
+    for (const [posicion, pieza] of piezas.entries()) {
+      const centroide = centroideDePolilinea(pieza);
+      const contenido = celdaPara(centroide);
+
+      contenido.tramos.push({
+        // Partir es la excepcion: un vial que cabe entero conserva su id de
+        // origen tal cual, y solo cuando hay varias piezas se numeran, para
+        // que cada una siga apuntando a su `way`.
+        id: partido ? `${tramo.id}#${posicion}` : tramo.id,
+        eje: localizarPosiciones(pieza, contenido.celda),
+        ancla: aLocal(centroide, contenido.celda),
+        tipo: tramo.tipo,
+        anchuraMetros: tramo.anchuraMetros,
+        carriles: tramo.carriles,
+        sentidoUnico: tramo.sentidoUnico,
+        nombre: tramo.nombre,
+        procedencia: tramo.procedencia,
+      });
+    }
   }
 
   // Orden estable por fila y luego por columna: dos ejecuciones con los mismos

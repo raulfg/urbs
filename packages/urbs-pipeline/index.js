@@ -17,7 +17,12 @@ export {
   crearReproyectorDeTerritorio,
 } from './src/reproyeccion.js';
 
-export { centroideDeAnillo, centroideDePolilinea, trocear } from './src/troceado.js';
+export {
+  centroideDeAnillo,
+  centroideDePolilinea,
+  partirPolilinea,
+  trocear,
+} from './src/troceado.js';
 
 export {
   DIRECTORIO_CELDAS_POR_DEFECTO,
