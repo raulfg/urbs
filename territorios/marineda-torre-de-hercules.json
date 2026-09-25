@@ -1,0 +1,12 @@
+{
+  "id": "marineda-torre-de-hercules",
+  "nombre": "Marineda - de la Torre de Hercules a la Marina",
+  "area": {
+    "lonMin": -8.425,
+    "latMin": 43.355,
+    "lonMax": -8.383,
+    "latMax": 43.393
+  },
+  "ladoCeldaMetros": 250,
+  "notas": "La peninsula entera de A Coruna: la Torre de Hercules en el extremo norte, el Orzan, Riazor, la Ciudad Vieja, la Marina y el ensanche hasta la entrada por Los Castros. Unos 3,4 x 4,2 km. Se anade porque el slice del casco historico no incluia ningun hito reconocible y resultaba dificil orientarse; este si. Mismo pipeline y mismo lado de celda: solo cambian las cuatro esquinas."
+}

@@ -4,7 +4,7 @@
 
 Motor que genera ciudades jugables en navegador a partir de datos geográficos abiertos. La ciudad es un **dato de entrada**, no código: el mismo pipeline debe poder generar cualquier territorio del mundo.
 
-> Estado: la cadena completa funciona de punta a punta — OSM → celdas → navegador. Se puede volar sobre A Coruña. No hay físicas, ni tráfico, ni fachadas, ni terreno: lo que se ve son volúmenes extruidos sobre huellas reales.
+> Estado: la cadena completa funciona de punta a punta — OSM → celdas → navegador. Se puede **conducir** por A Coruña: hay suelo sólido, los edificios no se atraviesan y un coche arcade con cámara de persecución. No hay tráfico, ni fachadas, ni texturas, ni **relieve** — el terreno es un plano llano, así que las cuestas reales de la ciudad todavía no están.
 
 ## La idea
 
@@ -51,7 +51,7 @@ Una altura medida y una estimada valen lo mismo para extruir, pero no valen lo m
 | `urbs-core` | Dominio y contratos. Sin dependencias, sin IO, sin render |
 | `urbs-providers` | Implementaciones de fuentes: OSM, Catastro, PNOA |
 | `urbs-pipeline` | Preprocesado offline: reproyección, troceado en celdas, exportación |
-| `urbs-viewer` | Runtime en el navegador: extrusión, origen flotante y streaming por proximidad |
+| `urbs-viewer` | Runtime en el navegador: extrusión, origen flotante, streaming, físicas y conducción |
 
 ## Arquitectura
 
@@ -102,7 +102,10 @@ Un territorio es un JSON versionado, no código. Para generar otra ciudad se cop
 
 ```bash
 npm run generar -- territorios/marineda-casco-historico.json
+npm run generar -- territorios/marineda-torre-de-hercules.json
 ```
+
+Hay dos territorios versionados. El primero es el *vertical slice* original, más de la mitad mar. El segundo cubre la península entera —la Torre de Hércules, el Orzán, Riazor, la Ciudad Vieja y la Marina— y existe porque en el primero no hay ningún hito reconocible y cuesta orientarse. Mismo pipeline, mismo lado de celda: solo cambian las cuatro esquinas.
 
 Descarga las capas que falten (una sola petición a Overpass por área), las reproyecta a los metros del territorio, las reparte en celdas y escribe un `.urbscell` por celda con contenido más un `indice.json`.
 
@@ -132,11 +135,26 @@ Fuente de ambas capas: `osm-edificios` y `osm-viario`. Atribución obligatoria, 
 npm run visor
 ```
 
-Abre <http://localhost:4173>. El visor es ESM nativo, sin empaquetador y sin paso de compilación: un mapa de importaciones resuelve `three`, `earcut` y `urbs-core`, y el servidor —sesenta líneas de `node:http`, sin dependencias— sirve la raíz del repo con los tipos MIME correctos.
+Abre <http://localhost:4173>. Con `?territorio=marineda-torre-de-hercules` se abre el otro. El visor es ESM nativo, sin empaquetador y sin paso de compilación: un mapa de importaciones resuelve `three`, `earcut`, `urbs-core` y `@dimforge/rapier3d-compat`, y el servidor —sesenta líneas de `node:http`, sin dependencias— sirve la raíz del repo con los tipos MIME correctos.
 
-Clic para tomar el ratón, `WASD` para moverse, `R`/`F` para subir y bajar, `Mayús` para acelerar, `Esc` para soltar.
+De Rapier se usa el paquete `-compat` y no el normal: el normal está pensado para pasar por un empaquetador —imports internos sin extensión y un import de wasm que el ESM nativo no resuelve— mientras que el `compat` es un único archivo con el wasm en base64. El precio es un `await RAPIER.init()` antes de tocar nada suyo, y por eso el arranque del visor es asíncrono.
 
-El panel de la esquina no es decoración. `Geometrías GPU` muestra `renderer.info.memory.geometries`, que es el detector de fugas más barato que existe: alejándose del territorio baja a **cero**, y al volver recupera exactamente el mismo número. `Rebases` cuenta las veces que el origen flotante se ha mudado bajo la cámara.
+Se abre **volando**, a 55 m sobre la manzana más densa. Clic para tomar el ratón, y `C` para alternar entre volar y conducir en cualquier momento.
+
+| | Volando | Conduciendo |
+| :---- | :---- | :---- |
+| `W` / `S` | Adelante y atrás | Acelerar · frenar y marcha atrás |
+| `A` / `D` | Desplazarse a los lados | Girar |
+| `R` / `F` | Subir y bajar | `R` endereza el coche si vuelca |
+| `Mayús` | Acelerar el vuelo | — |
+| `C` | Pasar a conducir | Volver a volar |
+| `Esc` | Soltar el ratón | Soltar el ratón |
+
+Alternar no desorienta: al entrar en el coche la cámara se pega detrás de él en el acto —suavizarla desde un kilómetro de distancia sería un viaje de varios segundos—, y al salir la cámara libre arranca justo donde la dejó la persecución, adoptando hacia dónde miraba.
+
+Ni la cámara libre ni el coche atraviesan el suelo o los edificios. La cámara no es un cuerpo físico, así que se le da una bola cinemática y un controlador de personaje de Rapier: se le pide al mundo cuánto de cada movimiento **cabe**, y al rozar una fachada se desliza en vez de clavarse. Subir sigue sin tener tope: volar alto es la forma de ver el territorio entero.
+
+El panel de la esquina no es decoración. `Geometrías GPU` muestra `renderer.info.memory.geometries`, que es el detector de fugas más barato que existe: alejándose del territorio baja a **cero**, y al volver recupera exactamente el mismo número. Debajo está el mismo detector para la física —`Colisionadores` y `Cuerpos`, contados por **Rapier** y no por el visor— que hace el mismo viaje de ida y vuelta. `Descartados` son los edificios sin casco convexo posible, separando los que filtra URBS de los que rechaza Rapier. `Ruedas en suelo` existe porque un vehículo de rayos **solo empuja por las ruedas que tocan el suelo**: si marca cero, el coche acelera a fondo sin moverse y nada más en pantalla lo explicaría.
 
 El color de cada edificio dice la **confianza** de su altura: lo declarado por la fuente y lo estimado por el motor se distinguen de un vistazo.
 
@@ -144,9 +162,11 @@ El color de cada edificio dice la **confianza** de su altura: lo declarado por l
 
 Extruye las huellas **en tiempo de ejecución**. Lo que viaja en una celda son datos, no mallas cocidas, así que las reglas de fachada se podrán retocar sin regenerar el territorio.
 
-Ninguna coordenada UTM absoluta llega a la GPU: cada celda se coloca en `origen de celda − ancla`, con el ancla en `float64` viajando con la cámara (decisión 0001, capa 2). El ancla se recalcula en absolutos en cada rebase en lugar de acumular desplazamientos, así que mil rebases no dejan deriva.
+Ninguna coordenada UTM absoluta llega a la GPU: cada celda se coloca en `origen de celda − ancla`, con el ancla en `float64` viajando con el jugador (decisión 0001, capa 2). El ancla se recalcula en absolutos en cada rebase en lugar de acumular desplazamientos, así que mil rebases no dejan deriva. Cuando el ancla se muda, el grafo de escena, el mundo de Rapier, el coche y la cámara se mueven **en la misma llamada**: rebasar los gráficos y no las colisiones teletransporta al jugador a través del suelo, y el síntoma no se parece a la causa. Está en [`docs/decisiones/0004-fisica-y-conduccion.md`](docs/decisiones/0004-fisica-y-conduccion.md).
 
-**No** hay físicas, tráfico, fachadas procedurales, texturas, terreno ni ortofoto. Nada de eso entra en este hito.
+El colisionador de un edificio es su **casco convexo**, deducido de la huella y no de la malla. Eso tiene un precio que se acepta a conciencia: un edificio en L se rellena por la escotadura, y en un casco medieval eso estrecha las calles. Por eso el coche nace sobre la calle más **ancha** de su celda, no sobre la más larga.
+
+**No** hay tráfico, peatones, misiones, fachadas procedurales, texturas, daños ni ortofoto. Y **no hay relieve**: el suelo es un plano llano en la cota cero, así que A Coruña sale plana aunque tenga cuestas de verdad. Lo que varía de altura son los edificios (de 2 a 119 m en este territorio), no el terreno. El relieve entra cuando entre el MDT LiDAR del PNOA.
 
 ## Convenciones
 
