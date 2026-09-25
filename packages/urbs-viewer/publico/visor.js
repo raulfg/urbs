@@ -14,12 +14,7 @@ import * as THREE from 'three';
 
 import { vistasDeCelda } from 'urbs-core';
 
-import {
-  CONSTANTE_PERSECUCION,
-  ADELANTO_MIRADA,
-  factorDeSuavizado,
-  puntoDePersecucion,
-} from '../src/camara-persecucion.js';
+import { seguirAlCoche } from '../src/camara-persecucion.js';
 import { COLOR_POR_CONFIANZA } from '../src/geometria.js';
 import { puntosDeSalida } from '../src/calzada.js';
 import { COLOR_AGUA, cotaEnCelda } from '../src/terreno.js';
@@ -359,6 +354,12 @@ async function arrancar() {
   // --- Modos. La camara libre y la de persecucion comparten la misma camara;
   // lo que cambia es quien la mueve.
   let conduciendo = false;
+  // La camara tiene su PROPIA guinada y persigue a la del coche con retraso.
+  // Pegarla al angulo del coche hace que el mundo pivote de golpe alrededor del
+  // morro al girar, y se siente rigido; el retraso es lo que abre la camara en
+  // la curva y la cierra a la salida. La altura es lo UNICO que se arrastra por
+  // el mundo; en planta la camara va clavada a la orbita de su guinada.
+  let camaraDelCoche = { guinada: 0, altura: null };
   const mirada = new THREE.Vector3();
   const deseoDeCamara = new THREE.Vector3();
 
@@ -374,8 +375,10 @@ async function arrancar() {
    * @returns {void}
    */
   function pegarCamaraAlCoche() {
-    const punto = puntoDePersecucion(coche.posicion, coche.guinada);
-    camara.position.set(punto.x, punto.y, punto.z);
+    camaraDelCoche = { guinada: coche.guinada, altura: null };
+    const paso = seguirAlCoche(camaraDelCoche, coche, 0);
+    camaraDelCoche = { guinada: paso.guinada, altura: paso.altura };
+    camara.position.set(paso.posicion.x, paso.posicion.y, paso.posicion.z);
   }
 
   function cambiarModo() {
@@ -454,22 +457,15 @@ async function arrancar() {
     if (conduciendo) {
       // La camara persigue DESPUES del rebase, para no perseguir un fotograma
       // al sitio viejo del coche.
-      const deseado = puntoDePersecucion(coche.posicion, coche.guinada);
-      const factor = factorDeSuavizado(segundos, CONSTANTE_PERSECUCION);
-      camara.position.lerp(new THREE.Vector3(deseado.x, deseado.y, deseado.z), factor);
-      // Tambien aqui: si el coche vuelca, la camara ideal se va por debajo del
-      // suelo y lo unico que se ve es la cara de atras del plano.
-      camara.position.y = Math.max(camara.position.y, ALTURA_MINIMA);
+      const paso = seguirAlCoche(camaraDelCoche, coche, segundos);
+      camaraDelCoche = { guinada: paso.guinada, altura: paso.altura };
 
-      const frente = coche.posicion;
-      const guinada = coche.guinada;
-      // El adelante del coche es `(-sin g, 0, -cos g)`, el mismo convenio que
-      // usa `puntoDePersecucion` para ponerse detras.
-      mirada.set(
-        frente.x - Math.sin(guinada) * ADELANTO_MIRADA,
-        frente.y + 1,
-        frente.z - Math.cos(guinada) * ADELANTO_MIRADA,
-      );
+      camara.position.set(paso.posicion.x, paso.posicion.y, paso.posicion.z);
+
+      // Se mira POR DELANTE del coche y algo mas alto que el: asi el coche cae
+      // al tercio inferior del cuadro y se ve la calle, en vez de conducir
+      // mirandole el techo.
+      mirada.set(paso.mirada.x, paso.mirada.y, paso.mirada.z);
       camara.lookAt(mirada);
     }
 
