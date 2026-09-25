@@ -163,6 +163,7 @@ flowchart LR
 - [ ] Estilo visual: realista o low-poly
 - [ ] Licencia del proyecto (interacción del share-alike de ODbL con la redistribución de celdas)
 - [ ] Qué hacer con un edificio o una calle que cruza el borde de celda: recortar o duplicar la referencia
+- [ ] `Tramo` no guarda si una vía es circulable. El proveedor OSM sí lo sabe (`access=no` deja fuera un `service` que por tipo sí lo sería), pero el dominio solo conserva `TipoVia`, así que ese matiz se pierde en la frontera salvo que se filtre al construir el proveedor. Si el tráfico con IA lo necesita, el campo va en `urbs-core`, no en el proveedor
 
 ## Próximos pasos
 

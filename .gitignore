@@ -18,3 +18,7 @@ dist/
 
 # Registro de skills local: contiene rutas absolutas de la maquina
 .atl/
+
+# Este repo SI versiona el lockfile: es publico y las versiones exactas
+# de package.json no fijan las dependencias transitivas.
+!package-lock.json
