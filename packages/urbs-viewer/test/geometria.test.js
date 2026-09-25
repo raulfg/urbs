@@ -4,9 +4,11 @@ import assert from 'node:assert/strict';
 import {
   ALTURA_PLANTA_POR_DEFECTO,
   Confianza,
+  TipoVia,
   crearCelda,
   crearProcedencia,
   codificarCelda,
+  esTipoConducible,
   vistasDeCelda,
 } from 'urbs-core';
 
@@ -16,6 +18,8 @@ import {
   COLOR_POR_CONFIANZA,
   alturaDeEdificio,
   construirGeometriaDeCelda,
+  firmeDeAcera,
+  firmeDeCalzada,
   orientarAnillo,
 } from '../src/geometria.js';
 
@@ -454,5 +458,94 @@ test('las coordenadas siguen siendo locales: la celda se coloca con su posicion,
   for (let i = 0; i < geometria.posiciones.length; i += 3) {
     assert.ok(Math.abs(geometria.posiciones[i]) < 2000, 'un vertice lleva UTM absoluto');
     assert.ok(Math.abs(geometria.posiciones[i + 2]) < 2000);
+  }
+});
+
+// --- Acera y calzada
+
+/** Un tramo recto de la anchura y el tipo que se le pidan. */
+function tramoDe(tipo, anchuraMetros, id) {
+  return {
+    id,
+    eje: [
+      [0, 100],
+      [200, 100],
+    ],
+    ancla: { este: 100, norte: 100 },
+    tipo,
+    anchuraMetros,
+    carriles: null,
+    sentidoUnico: false,
+    nombre: null,
+    procedencia: DECLARADO,
+  };
+}
+
+/** Colores distintos que aparecen en una geometria, redondeados. */
+function coloresDe({ colores }) {
+  const vistos = new Set();
+  for (let i = 0; i < colores.length; i += 3) {
+    vistos.add([0, 1, 2].map((k) => colores[i + k].toFixed(3)).join(','));
+  }
+  return vistos;
+}
+
+/** Cota mas alta de una geometria. */
+function cotaMaxima({ posiciones }) {
+  let alta = -Infinity;
+  for (let i = 1; i < posiciones.length; i += 3) alta = Math.max(alta, posiciones[i]);
+  return alta;
+}
+
+test('una acera NO se pinta con el mismo asfalto que una calle', () => {
+  // El fallo que se veia: 241 km de acera, el 48% de la superficie de calzada
+  // del slice, pintados con el color del viario. El trazado se leia como un
+  // garabato de cintas finas sueltas en vez de como una red de calles, porque
+  // la mayoria de esas cintas no eran calles.
+  const calle = construirGeometriaDeCelda(
+    vistasDe({ edificios: [], tramos: [tramoDe('residencial', 6, 'way/1')] }),
+  );
+  const acera = construirGeometriaDeCelda(
+    vistasDe({ edificios: [], tramos: [tramoDe('peatonal', 2.5, 'way/2')] }),
+  );
+
+  const deCalle = [...coloresDe(calle)];
+  const deAcera = [...coloresDe(acera)];
+  assert.equal(deCalle.length, 1, 'la calle es de un color');
+  assert.equal(deAcera.length, 1, 'la acera es de un color');
+  assert.notEqual(deCalle[0], deAcera[0], 'y no es el mismo color');
+});
+
+test('la acera va SOBRE el bordillo, no a ras de calzada', () => {
+  // El color solo no basta: a contraluz y con niebla dos grises se confunden.
+  // El escalon es lo que hace que una acera se lea como acera desde el coche.
+  const calle = construirGeometriaDeCelda(
+    vistasDe({ edificios: [], tramos: [tramoDe('residencial', 6, 'way/1')] }),
+  );
+  const acera = construirGeometriaDeCelda(
+    vistasDe({ edificios: [], tramos: [tramoDe('peatonal', 2.5, 'way/2')] }),
+  );
+
+  assert.ok(
+    cotaMaxima(acera) > cotaMaxima(calle),
+    `la acera quedo a ${cotaMaxima(acera)} y la calzada a ${cotaMaxima(calle)}`,
+  );
+});
+
+test('quien decide si es calzada es el predicado del dominio, no una lista aparte', () => {
+  // Es la razon de ser de todo esto. Una lista de tipos en el visor y otra en
+  // el dominio coinciden el dia que se escriben y divergen despues.
+  for (const tipo of Object.values(TipoVia)) {
+    const geometria = construirGeometriaDeCelda(
+      vistasDe({ edificios: [], tramos: [tramoDe(tipo, 6, 'way/1')] }),
+    );
+    const esperado = esTipoConducible(tipo) ? firmeDeCalzada() : firmeDeAcera();
+    const color = [...coloresDe(geometria)][0];
+
+    assert.equal(
+      color,
+      esperado.color.map((c) => c.toFixed(3)).join(','),
+      `${tipo} se pinto del firme que no era`,
+    );
   }
 });

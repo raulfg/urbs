@@ -17,7 +17,7 @@
 
 import earcut from 'earcut';
 
-import { ALTURA_PLANTA_POR_DEFECTO, Confianza } from 'urbs-core';
+import { ALTURA_PLANTA_POR_DEFECTO, Confianza, esTipoConducible } from 'urbs-core';
 
 import { bordesDeCalzada } from './calzada.js';
 import { cotaEnCelda, cotasDePuente } from './terreno.js';
@@ -28,8 +28,17 @@ import { cotaEnCelda, cotasDePuente } from './terreno.js';
  */
 export const ALTURA_POR_DEFECTO = 8;
 
-/** A que altura flota la cinta del viario, para no pelearse con el suelo. */
+/** A que altura flota la cinta de la calzada, para no pelearse con el suelo. */
 export const ALTURA_VIARIO = 0.05;
+
+/**
+ * A que altura va la acera. Es el bordillo, y no es decoracion.
+ *
+ * El color solo no basta: a contraluz y con bruma, dos grises se confunden. El
+ * escalon es lo que hace que una acera se lea como acera desde dentro del
+ * coche, que es desde donde se mira.
+ */
+export const ALTURA_ACERA = 0.17;
 
 /**
  * El color hace visible la calidad del dato de un vistazo: lo que se ve verde
@@ -47,6 +56,44 @@ export const COLOR_DESCONOCIDO = Object.freeze([0.6, 0.6, 0.6]);
 
 /** El viario no lleva color por procedencia: es el suelo, no el sujeto. */
 export const COLOR_VIARIO = Object.freeze([0.3, 0.3, 0.32]);
+
+/**
+ * Firme de la acera: granito claro, el de la ciudad que se esta copiando.
+ *
+ * Frio no, a proposito. El asfalto ya tira a azul; si la acera tambien lo
+ * hiciera, de lejos y bajo la bruma volverian a ser la misma cinta gris y
+ * estariamos donde empezamos.
+ */
+export const COLOR_ACERA = Object.freeze([0.63, 0.6, 0.55]);
+
+/**
+ * Como se pinta y a que altura va un tramo por el que pasa un coche.
+ *
+ * @returns {{color: ReadonlyArray<number>, altura: number}}
+ */
+export function firmeDeCalzada() {
+  return { color: COLOR_VIARIO, altura: ALTURA_VIARIO };
+}
+
+/** Lo mismo para un tramo por el que no pasa un coche. */
+export function firmeDeAcera() {
+  return { color: COLOR_ACERA, altura: ALTURA_ACERA };
+}
+
+/**
+ * Firme que le toca a un tipo de via.
+ *
+ * La decision la toma `esTipoConducible`, del dominio, y NO una lista de tipos
+ * escrita aqui. Una lista en el visor y otra en el dominio coinciden el dia
+ * que se escriben y divergen despues; asi fue como se pintaron 241 km de acera
+ * con el asfalto de una autopista.
+ *
+ * @param {string|undefined} tipo
+ * @returns {{color: ReadonlyArray<number>, altura: number}}
+ */
+export function firmeDeTramo(tipo) {
+  return esTipoConducible(tipo) ? firmeDeCalzada() : firmeDeAcera();
+}
 
 /**
  * Estructuras, en el orden en que viajan en la celda. Es el mismo orden que
@@ -321,7 +368,14 @@ function extruirEdificio(malla, anillos, altura, color, base = 0) {
  * @param {number} anchura
  * @returns {void}
  */
-function tenderCalzada(malla, eje, anchura, relieve = null, estructura = ESTRUCTURA_RASANTE) {
+function tenderCalzada(
+  malla,
+  eje,
+  anchura,
+  relieve = null,
+  estructura = ESTRUCTURA_RASANTE,
+  firme = firmeDeCalzada(),
+) {
   // El dato real puede traer una anchura invalida en un tramo suelto. Perder
   // ese tramo es mejor que perder la celda entera, que es lo que pasaria si se
   // dejara subir el RangeError.
@@ -352,8 +406,8 @@ function tenderCalzada(malla, eje, anchura, relieve = null, estructura = ESTRUCT
     estructura === ESTRUCTURA_PUENTE && relieve !== null ? cotasDePuente(ejeLimpio, relieve) : null;
 
   const cotaDeBorde = (indice, x, z) => {
-    if (tablero !== null) return tablero[indice] + ALTURA_VIARIO;
-    return (relieve === null ? 0 : cotaEnCelda(relieve, x, z) ?? 0) + ALTURA_VIARIO;
+    if (tablero !== null) return tablero[indice] + firme.altura;
+    return (relieve === null ? 0 : cotaEnCelda(relieve, x, z) ?? 0) + firme.altura;
   };
 
   let derechaAnterior = malla.vertice(
@@ -361,14 +415,14 @@ function tenderCalzada(malla, eje, anchura, relieve = null, estructura = ESTRUCT
     cotaDeBorde(0, derecha[0], derecha[1]),
     -derecha[1],
     ARRIBA,
-    COLOR_VIARIO,
+    firme.color,
   );
   let izquierdaAnterior = malla.vertice(
     izquierda[0],
     cotaDeBorde(0, izquierda[0], izquierda[1]),
     -izquierda[1],
     ARRIBA,
-    COLOR_VIARIO,
+    firme.color,
   );
 
   for (let i = 1; i < vertices; i += 1) {
@@ -377,14 +431,14 @@ function tenderCalzada(malla, eje, anchura, relieve = null, estructura = ESTRUCT
       cotaDeBorde(i, derecha[i * 2], derecha[i * 2 + 1]),
       -derecha[i * 2 + 1],
       ARRIBA,
-      COLOR_VIARIO,
+      firme.color,
     );
     const z = malla.vertice(
       izquierda[i * 2],
       cotaDeBorde(i, izquierda[i * 2], izquierda[i * 2 + 1]),
       -izquierda[i * 2 + 1],
       ARRIBA,
-      COLOR_VIARIO,
+      firme.color,
     );
 
     // Devanado antihorario visto desde arriba, para que la cara mire al cielo.
@@ -453,6 +507,7 @@ export function construirGeometriaDeCelda(vistas) {
       tramos.anchura[i],
       relieve,
       ESTRUCTURAS[tramos.estructura[i]] ?? ESTRUCTURA_RASANTE,
+      firmeDeTramo(diccionarios.tiposVia[tramos.tipo[i]]),
     );
   }
 
