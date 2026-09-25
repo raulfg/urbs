@@ -27,13 +27,14 @@ Solo OSM tiene cobertura mundial. Catastro y PNOA son exclusivos de España. As�
 
 | Capa | Fuente rica (España) | Fallback global | Qué se pierde |
 | :---- | :---- | :---- | :---- |
-| Edificios | Catastro INSPIRE | OSM `building` | Volumetría por partes y uso detallado |
-| Altura y plantas | Catastro | OSM `height` / `building:levels` | Cobertura; hay que estimar |
+| Edificios | Catastro INSPIRE | OSM `building` + multipolígonos | Cobertura |
+| Plantas | Catastro (por parte) | OSM `building:levels` | Hay que estimar |
+| Altura | *nadie la aporta* | *nadie la aporta* | Se deriva siempre de las plantas |
 | Viario | OSM | OSM | Nada, fuente única |
 | Relieve | MDT LiDAR PNOA (0,5 m) | Copernicus DEM (30 m) | Resolución |
 | Suelo | Ortofoto PNOA (25 cm) | *no existe equivalente libre* | Hay que ir a textura procedural |
 
-Esa última fila es una limitación real, no un hueco por rellenar: fuera de España no hay ortofoto libre de 25 cm con cobertura uniforme. El motor funciona sin ella.
+Dos filas de esa tabla son limitaciones reales, no huecos por rellenar. Fuera de España no hay ortofoto libre de 25 cm con cobertura uniforme, y **la altura de los edificios no la da ninguna fuente**: `heightAboveGround` no existe en el Catastro y `height` cubre el 0,3 % en OSM. Se deriva de las plantas, a 3 m por planta, que es la constante que el propio Catastro delata en sus datos bajo rasante.
 
 Por eso el orden de trabajo es **OSM primero**. Si se construye antes el camino rico, el camino pobre nace muerto y se pudre sin que nadie lo note, hasta el día que intentas generar Lisboa.
 
@@ -85,11 +86,13 @@ npm test
 | Fuente | Licencia | Atribución |
 | :---- | :---- | :---- |
 | OpenStreetMap | ODbL | © colaboradores de OpenStreetMap |
-| Catastro INSPIRE | Licencia D.G. del Catastro | Citar la fuente |
+| Catastro INSPIRE | Licencia D.G. del Catastro (2016) | Dirección General del Catastro (Ministerio de Hacienda) |
 | IGN / PNOA | CC BY 4.0 | Obra derivada de PNOA CC-BY scne.es |
 | Copernicus DEM | Licencia Copernicus | Citar la fuente |
 
 Cada proveedor declara su atribución y el motor **agrega solo las de las fuentes que realmente ha usado**, para que la pantalla de créditos no dependa de que alguien se acuerde de actualizarla.
+
+La licencia del Catastro autoriza el uso comercial de la información **transformada** y prohíbe redistribuir la original. Por eso los datos crudos descargados no se versionan ni se empaquetan con el juego: viven detrás de un script de descarga y están en `.gitignore`. Las celdas generadas sí son obra derivada y se distribuyen sin problema.
 
 No se usa geometría ni tiles de Google Maps, ni Street View, ni Photorealistic 3D Tiles.
 
