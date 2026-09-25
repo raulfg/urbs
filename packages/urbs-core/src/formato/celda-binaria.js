@@ -224,11 +224,17 @@ function codificarRelieve(relieve, claveCelda) {
 /**
  * Devuelve el relieve de unas vistas en METROS, con `null` donde no hay dato.
  *
- * Es lo comodo, no lo rapido: materializa un array por celda. Quien vaya a
+ * Es lo comodo, no lo rapido: materializa dos arrays por celda. Quien vaya a
  * construir la malla para la GPU quiere `vistas.relieve` en crudo.
  *
+ * LA BANDERA DE AGUA SALE TAMBIEN, y no es un extra: este es el camino de
+ * lectura "amable", el que usa quien escribe una herramienta, un fixture o un
+ * script de depuracion. Si aqui faltara, ese alguien contaria cero agua sobre
+ * un archivo que la tiene y no habria ningun error que se lo dijera. Los dos
+ * caminos tienen que contar lo mismo, y hay una prueba que lo exige.
+ *
  * @param {Object} vistas
- * @returns {{postes: number, pasoMetros: number, cotas: Array<number|null>}|null}
+ * @returns {{postes: number, pasoMetros: number, cotas: Array<number|null>, agua: boolean[]}|null}
  */
 function relieveDeVistas(vistas) {
   const { postes, pasoMetros, cotaBase, cotas } = vistas.relieve;
@@ -237,10 +243,12 @@ function relieveDeVistas(vistas) {
   }
 
   const salida = new Array(cotas.length);
+  const agua = new Array(cotas.length);
   for (let i = 0; i < cotas.length; i += 1) {
     salida[i] = cotas[i] === SIN_DATO_RELIEVE ? null : cotaBase + cotas[i] / 10;
+    agua[i] = esAguaEnPoste(vistas.relieve, i);
   }
-  return Object.freeze({ postes, pasoMetros, cotas: salida });
+  return Object.freeze({ postes, pasoMetros, cotas: salida, agua });
 }
 
 /**

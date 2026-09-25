@@ -232,3 +232,63 @@ test('un poste bajo la cota del agua puede NO ser agua: es la razon de que exist
 
   assert.equal(esAguaEnPoste(vistas.relieve, 0), false);
 });
+
+// --- Los dos caminos de lectura tienen que contar lo mismo
+
+test('`decodificarCelda` y `vistasDeCelda` dan el MISMO agua para los mismos bytes', () => {
+  // Esta es la prueba que impide que los dos caminos se separen. Ya paso una
+  // vez: la bandera existia en el binario, `vistasDeCelda` la exponia y el
+  // visor la usaba, pero `decodificarCelda` la perdia en silencio. Quien
+  // escribiera una herramienta contra esa API contaba CERO agua sobre un
+  // archivo que la tenia, y no habia ningun error que se lo dijera.
+  const agua = Uint8Array.from([1, 0, 1, 1, 0, 0, 1, 0, 1]);
+  const bytes = codificar({ relieve: { ...relieve([5, 6, 7, 8, 9, 10, 11, 12, 13]), agua } });
+
+  const vistas = vistasDeCelda(bytes);
+  const { relieve: comodo } = decodificarCelda(bytes);
+
+  assert.equal(comodo.agua.length, 9);
+  for (let i = 0; i < 9; i += 1) {
+    assert.equal(comodo.agua[i], esAguaEnPoste(vistas.relieve, i), `poste ${i}`);
+    assert.equal(comodo.agua[i], agua[i] === 1, `poste ${i} contra el original`);
+  }
+});
+
+test('los dos caminos dan las mismas COTAS, no solo la misma agua', () => {
+  const metros = [5, 6.5, 7, 8, 9.5, 10, 11, 12, 13];
+  const bytes = codificar({ relieve: relieve(metros) });
+
+  const vistas = vistasDeCelda(bytes);
+  const { relieve: comodo } = decodificarCelda(bytes);
+  const { cotaBase } = vistas.cabecera.relieve;
+
+  for (let i = 0; i < metros.length; i += 1) {
+    const crudo = cotaBase + vistas.relieve.cotas[i] / 10;
+    assert.ok(Math.abs(comodo.cotas[i] - crudo) < 1e-6, `poste ${i}`);
+  }
+});
+
+test('ida y vuelta completa de v3: cotas, agua y estructura salen como entraron', () => {
+  const metros = [0, 0, 12, 0, 3, 20, 5, 25, 40];
+  const agua = Uint8Array.from([1, 1, 0, 1, 0, 0, 0, 0, 0]);
+  const bytes = codificar({
+    relieve: { ...relieve(metros), agua },
+    tramos: [tramo({ id: 'way/p', estructura: Estructura.PUENTE, nivel: 1 })],
+  });
+
+  const leido = decodificarCelda(bytes);
+
+  assert.equal(leido.version, VERSION_FORMATO);
+  assert.equal(leido.relieve.postes, 3);
+  assert.equal(leido.relieve.pasoMetros, 125);
+  for (const [i, esperado] of metros.entries()) {
+    assert.ok(Math.abs(leido.relieve.cotas[i] - esperado) <= 0.05, `cota ${i}`);
+    assert.equal(leido.relieve.agua[i], agua[i] === 1, `agua ${i}`);
+  }
+  assert.equal(leido.tramos[0].estructura, Estructura.PUENTE);
+  assert.equal(leido.tramos[0].nivel, 1);
+});
+
+test('una celda sin relieve no trae agua ni cotas, y lo dice con null', () => {
+  assert.equal(decodificarCelda(codificar({})).relieve, null);
+});
