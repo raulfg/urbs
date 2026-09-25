@@ -347,6 +347,10 @@ export function trocear({
         carriles: tramo.carriles,
         sentidoUnico: tramo.sentidoUnico,
         nombre: tramo.nombre,
+        // Cada pieza de un vial partido hereda la estructura del original: un
+        // puente troceado en tres celdas sigue siendo un puente en las tres.
+        estructura: tramo.estructura,
+        nivel: tramo.nivel,
         procedencia: tramo.procedencia,
       });
     }

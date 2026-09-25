@@ -25,15 +25,35 @@ import {
   esSeguroEnFloat32,
   pasoFloat32,
 } from '../dominio/celda.js';
+import { SIN_DATO } from '../dominio/elevacion.js';
 
 /** Ocho bytes ASCII al principio del archivo. Ni se traduce ni se acorta. */
 export const MAGIA_URBSCELL = 'URBSCELL';
 
 /** Version del formato. Un lector que no la reconozca debe negarse a leer. */
-export const VERSION_FORMATO = 1;
+export const VERSION_FORMATO = 2;
 
 /** Tamano exacto de la cabecera, en bytes. */
-export const BYTES_CABECERA = 72;
+export const BYTES_CABECERA = 88;
+
+/**
+ * Cota ausente dentro de la malla de relieve, en el espacio RELATIVO.
+ *
+ * Es `-32768` porque es el unico valor de un int16 que no puede salir de
+ * cuantizar una cota real: las cotas se guardan relativas a la base de la
+ * celda, o sea siempre >= 0 salvo redondeo. Cero NO vale de centinela: cero es
+ * una cota perfectamente valida y ademas es el nivel del mar, asi que
+ * confundirlos mete agua en mitad de una ladera.
+ */
+export const SIN_DATO_RELIEVE = -32768;
+
+/**
+ * Orden de las estructuras dentro del archivo.
+ *
+ * Es una lista CERRADA y su orden es parte del formato: cambiarlo reinterpreta
+ * los archivos ya escritos. Anadir al final es compatible; reordenar, no.
+ */
+const ESTRUCTURAS_EN_ARCHIVO = Object.freeze(['rasante', 'puente', 'tunel']);
 
 /**
  * Toda seccion empieza en un multiplo de 8 bytes. Asi el lector puede crear
@@ -113,6 +133,94 @@ const PLATAFORMA_LITTLE_ENDIAN = new Uint8Array(new Uint16Array([1]).buffer)[0] 
  */
 export function margenPorDefecto(ladoCeldaMetros) {
   return ladoCeldaMetros * MARGEN_EN_LADOS_POR_DEFECTO;
+}
+
+/**
+ * Cuantiza la malla de relieve a decimetros RELATIVOS a la celda.
+ *
+ * El mismo truco que el origen flotante, aplicado a la vertical. Un int16 en
+ * decimetros ABSOLUTOS llega a 3.276 m y se queda corto en el Mulhacen
+ * (3.479 m); relativo a la cota base de la celda no se queda corto en ninguna
+ * parte, porque una celda de 250 m no abarca semejante desnivel ni de lejos.
+ *
+ * A cambio, el decimetro de resolucion es holgado: el error que introduce el
+ * propio paso de malla de 10 m es de 0,17 m rms en suelo urbano, o sea tres
+ * veces mayor que el del redondeo.
+ *
+ * @param {{paso: number, cotas: ArrayLike<number>}|null|undefined} relieve
+ * @param {string} claveCelda
+ * @returns {{postes: number, pasoMetros: number, cotaBase: number, cotas: Int16Array}}
+ */
+function codificarRelieve(relieve, claveCelda) {
+  if (relieve === null || relieve === undefined) {
+    return { postes: 0, pasoMetros: 0, cotaBase: 0, cotas: new Int16Array(0) };
+  }
+
+  const { paso, cotas } = relieve;
+  if (!(Number.isFinite(paso) && paso > 0)) {
+    throw new RangeError(
+      `codificarCelda: el \`paso\` de la malla de relieve de ${claveCelda} debe ser positivo, y es ${paso}`,
+    );
+  }
+  if (cotas === null || typeof cotas !== 'object' || cotas.length === 0) {
+    throw new TypeError(`codificarCelda: la malla de relieve de ${claveCelda} no trae cotas`);
+  }
+
+  const postes = Math.round(Math.sqrt(cotas.length));
+  if (postes * postes !== cotas.length) {
+    throw new RangeError(
+      `codificarCelda: la malla de relieve de ${claveCelda} tiene ${cotas.length} cotas y no es cuadrada; hacen falta postes x postes`,
+    );
+  }
+
+  let minima = Infinity;
+  for (let i = 0; i < cotas.length; i += 1) {
+    const cota = cotas[i];
+    if (cota === SIN_DATO || !Number.isFinite(cota)) continue;
+    if (cota < minima) minima = cota;
+  }
+  // Sin una sola cota util la base da igual; se deja en cero y todo va a centinela.
+  const cotaBase = minima === Infinity ? 0 : Math.floor(minima);
+
+  const salida = new Int16Array(cotas.length);
+  for (let i = 0; i < cotas.length; i += 1) {
+    const cota = cotas[i];
+    if (cota === SIN_DATO || !Number.isFinite(cota)) {
+      salida[i] = SIN_DATO_RELIEVE;
+      continue;
+    }
+    const decimetros = Math.round((cota - cotaBase) * 10);
+    if (decimetros > 32767) {
+      throw new RangeError(
+        `codificarCelda: la celda ${claveCelda} abarca mas de 3.276 m de desnivel (${cota - cotaBase} m). Eso no es una celda, es un error.`,
+      );
+    }
+    salida[i] = decimetros;
+  }
+
+  return { postes, pasoMetros: paso, cotaBase, cotas: salida };
+}
+
+/**
+ * Devuelve el relieve de unas vistas en METROS, con `null` donde no hay dato.
+ *
+ * Es lo comodo, no lo rapido: materializa un array por celda. Quien vaya a
+ * construir la malla para la GPU quiere `vistas.relieve` en crudo.
+ *
+ * @param {Object} vistas
+ * @returns {{postes: number, pasoMetros: number, cotas: Array<number|null>}|null}
+ */
+function relieveDeVistas(vistas) {
+  const { postes, pasoMetros, cotaBase, cotas } = vistas.relieve;
+  if (postes === 0) {
+    return null;
+  }
+
+  const salida = new Array(cotas.length);
+  for (let i = 0; i < cotas.length; i += 1) {
+    salida[i] = cotas[i] === SIN_DATO_RELIEVE ? null : cotaBase + cotas[i] / 10;
+  }
+  return Object.freeze({ postes, pasoMetros, cotas: salida });
 }
 
 /**
@@ -365,6 +473,7 @@ export function codificarCelda(contenido) {
   const margen = validarMargen(contenido.margenMetros, celda.ladoCeldaMetros);
   const edificios = contenido.edificios ?? [];
   const tramos = contenido.tramos ?? [];
+  const relieve = contenido.relieve ?? null;
 
   if (!Array.isArray(edificios) || !Array.isArray(tramos)) {
     throw new TypeError('codificarCelda: `edificios` y `tramos` deben ser listas');
@@ -444,6 +553,8 @@ export function codificarCelda(contenido) {
   const tramosCarriles = new Int16Array(numeroTramos);
   const tramosBanderas = new Uint8Array(numeroTramos);
   const tramosTipo = new Uint8Array(numeroTramos);
+  const tramosEstructura = new Uint8Array(numeroTramos);
+  const tramosNivel = new Int8Array(numeroTramos);
   const tramosProcedencia = new Uint16Array(numeroTramos);
   const idsTramos = new Array(numeroTramos);
   const nombresTramos = new Array(numeroTramos);
@@ -478,6 +589,23 @@ export function codificarCelda(contenido) {
     }
     tramosTipo[posicion] = tiposVia.indiceDe(tramo.tipo, tramo.tipo);
 
+    // Sin esto, en cuanto el viario siga el terreno un puente se hunde en lo
+    // que cruza y la boca de un tunel queda enterrada.
+    const estructura = tramo.estructura ?? ESTRUCTURAS_EN_ARCHIVO[0];
+    const indiceEstructura = ESTRUCTURAS_EN_ARCHIVO.indexOf(estructura);
+    if (indiceEstructura < 0) {
+      throw new RangeError(
+        `codificarCelda: estructura desconocida "${estructura}" en "${id}"; son ${ESTRUCTURAS_EN_ARCHIVO.join(', ')}`,
+      );
+    }
+    tramosEstructura[posicion] = indiceEstructura;
+
+    const nivel = tramo.nivel ?? 0;
+    if (!Number.isInteger(nivel) || nivel < -128 || nivel > 127) {
+      throw new RangeError(`codificarCelda: el \`nivel\` de "${id}" debe ser un entero de un byte con signo, y es ${nivel}`);
+    }
+    tramosNivel[posicion] = nivel;
+
     const procedencia = normalizarProcedencia(tramo.procedencia, id);
     tramosProcedencia[posicion] = procedencias.indiceDe(
       claveDeProcedencia(procedencia),
@@ -488,6 +616,10 @@ export function codificarCelda(contenido) {
     nombresTramos[posicion] = tramo.nombre ?? null;
   }
   tramosInicioVertice[numeroTramos] = verticesTramos.length / 2;
+
+  // --- Relieve. Opcional: una celda sin proveedor de relieve lo declara con
+  // cero postes, que NO es lo mismo que una malla llana a cota cero.
+  const relieveCodificado = codificarRelieve(relieve, celda.clave);
 
   const tablaAtributos = new TextEncoder().encode(
     JSON.stringify({
@@ -517,7 +649,10 @@ export function codificarCelda(contenido) {
     { tipo: Int16Array, datos: tramosCarriles },
     { tipo: Uint8Array, datos: tramosBanderas },
     { tipo: Uint8Array, datos: tramosTipo },
+    { tipo: Uint8Array, datos: tramosEstructura },
+    { tipo: Int8Array, datos: tramosNivel },
     { tipo: Uint16Array, datos: tramosProcedencia },
+    { tipo: Int16Array, datos: relieveCodificado.cotas },
   ];
 
   let cursor = BYTES_CABECERA;
@@ -546,8 +681,13 @@ export function codificarCelda(contenido) {
   vista.setFloat64(48, margen, true);
   vista.setUint32(56, numeroEdificios, true);
   vista.setUint32(60, numeroTramos, true);
-  vista.setUint32(64, desplazamientoTabla, true);
-  vista.setUint32(68, tablaAtributos.length, true);
+  vista.setUint32(64, relieveCodificado.postes, true);
+  vista.setFloat32(68, relieveCodificado.pasoMetros, true);
+  // La cota base va en float64 por la misma razon que el origen: es la unica
+  // magnitud absoluta del relieve y vive una sola vez (decision 0001, regla 2).
+  vista.setFloat64(72, relieveCodificado.cotaBase, true);
+  vista.setUint32(80, desplazamientoTabla, true);
+  vista.setUint32(84, tablaAtributos.length, true);
 
   for (const seccion of secciones) {
     new seccion.tipo(buffer, seccion.desplazamiento, seccion.datos.length).set(seccion.datos);
@@ -617,8 +757,15 @@ export function leerCabecera(bytes) {
     margenMetros: vista.getFloat64(48, true),
     numeroEdificios: vista.getUint32(56, true),
     numeroTramos: vista.getUint32(60, true),
-    desplazamientoTablaAtributos: vista.getUint32(64, true),
-    bytesTablaAtributos: vista.getUint32(68, true),
+    // Cero postes NO es una malla llana a cota cero: es "esta celda no tiene
+    // relieve", que es lo que pasa mientras no haya proveedor que lo sirva.
+    relieve: Object.freeze({
+      postes: vista.getUint32(64, true),
+      pasoMetros: vista.getFloat32(68, true),
+      cotaBase: vista.getFloat64(72, true),
+    }),
+    desplazamientoTablaAtributos: vista.getUint32(80, true),
+    bytesTablaAtributos: vista.getUint32(84, true),
   });
 }
 
@@ -703,7 +850,12 @@ export function vistasDeCelda(origen) {
   const tramosCarriles = cursor.leer(Int16Array, numeroTramos);
   const tramosBanderas = cursor.leer(Uint8Array, numeroTramos);
   const tramosTipo = cursor.leer(Uint8Array, numeroTramos);
+  const tramosEstructura = cursor.leer(Uint8Array, numeroTramos);
+  const tramosNivel = cursor.leer(Int8Array, numeroTramos);
   const tramosProcedencia = cursor.leer(Uint16Array, numeroTramos);
+
+  const postesRelieve = cabecera.relieve.postes;
+  const relieveCotas = cursor.leer(Int16Array, postesRelieve * postesRelieve);
 
   const finTabla = base + cabecera.desplazamientoTablaAtributos + cabecera.bytesTablaAtributos;
   if (finTabla > limite) {
@@ -741,7 +893,20 @@ export function vistasDeCelda(origen) {
       carriles: tramosCarriles,
       banderas: tramosBanderas,
       tipo: tramosTipo,
+      estructura: tramosEstructura,
+      nivel: tramosNivel,
       procedencia: tramosProcedencia,
+    }),
+    /**
+     * Relieve en crudo: decimetros relativos a `cabecera.relieve.cotaBase`, con
+     * `SIN_DATO_RELIEVE` donde no hay dato. Sin convertir, igual que el resto de
+     * vistas: convertirlo aqui seria copiar la malla entera en cada celda.
+     */
+    relieve: Object.freeze({
+      postes: postesRelieve,
+      pasoMetros: cabecera.relieve.pasoMetros,
+      cotaBase: cabecera.relieve.cotaBase,
+      cotas: relieveCotas,
     }),
     diccionarios: Object.freeze({
       usos: tabla.diccionarios.usos,
@@ -792,6 +957,8 @@ export function decodificarCelda(bytes) {
     carriles: tramosCarriles,
     banderas: tramosBanderas,
     tipo: tramosTipo,
+    estructura: tramosEstructura,
+    nivel: tramosNivel,
     procedencia: tramosProcedencia,
   } = vistas.tramos;
 
@@ -841,6 +1008,8 @@ export function decodificarCelda(bytes) {
         carriles: carriles === AUSENTE_ENTERO ? null : carriles,
         sentidoUnico: (tramosBanderas[i] & BIT_SENTIDO_UNICO) !== 0,
         nombre: nombres.tramos[i] ?? null,
+        estructura: ESTRUCTURAS_EN_ARCHIVO[tramosEstructura[i]] ?? ESTRUCTURAS_EN_ARCHIVO[0],
+        nivel: tramosNivel[i],
         procedencia: procedencias[tramosProcedencia[i]],
       }),
     );
@@ -853,5 +1022,6 @@ export function decodificarCelda(bytes) {
     margenMetros: cabecera.margenMetros,
     edificios,
     tramos,
+    relieve: relieveDeVistas(vistas),
   });
 }

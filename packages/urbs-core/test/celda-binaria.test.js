@@ -123,8 +123,10 @@ function igualEnFloat32(recibido, esperado, etiqueta) {
 
 test('la magia, la version y el tamano de cabecera son constantes del formato', () => {
   assert.equal(MAGIA_URBSCELL, 'URBSCELL');
-  assert.equal(VERSION_FORMATO, 1);
-  assert.equal(BYTES_CABECERA, 72);
+  // v2 anade la malla de relieve y la estructura del viario. La cabecera crece
+  // de 72 a 88 bytes; el detalle de v2 esta en `celda-v2.test.js`.
+  assert.equal(VERSION_FORMATO, 2);
+  assert.equal(BYTES_CABECERA, 88);
   assert.equal(ALINEACION_SECCION, 8);
   assert.equal(AUSENTE_ENTERO, -1);
 });
