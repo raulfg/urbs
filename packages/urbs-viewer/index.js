@@ -36,4 +36,19 @@ export {
   crearOrigenFlotante,
 } from './src/origen-flotante.js';
 
-export { distanciaACelda, celdasEnRadio, planDeCarga } from './src/streaming.js';
+export {
+  crearColaAmortizada,
+  colisionesDeCelda,
+  nubeDeColisionDeEdificio,
+} from './src/colisiones.js';
+
+export { crearRebase, desplazar } from './src/rebase.js';
+
+export {
+  RADIO_FISICA_POR_DEFECTO,
+  RADIO_RENDER_POR_DEFECTO,
+  distanciaACelda,
+  celdasEnRadio,
+  planDeCarga,
+  radiosDeStreaming,
+} from './src/streaming.js';

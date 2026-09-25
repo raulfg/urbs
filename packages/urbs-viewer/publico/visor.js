@@ -14,7 +14,11 @@ import * as THREE from 'three';
 
 import { COLOR_POR_CONFIANZA } from '../src/geometria.js';
 import { crearGestorDeCeldas } from './gestor-celdas.js';
+import { crearGestorDeColisiones } from './gestor-colisiones.js';
+import { crearMundoFisico } from './mundo-fisico.js';
 import { crearOrigenFlotante } from '../src/origen-flotante.js';
+import { crearRebase } from '../src/rebase.js';
+import { radiosDeStreaming } from '../src/streaming.js';
 import { crearControles } from './controles.js';
 
 /** Territorio que se abre por defecto; `?territorio=` lo cambia. */
@@ -30,8 +34,11 @@ const RAIZ_CELDAS = '/datos/celdas';
  */
 const NOMBRE_INDICE = 'indice.json';
 
-/** Radio de carga. Un poco mas de un kilometro: cuatro celdas a la redonda. */
-const RADIO_CARGA = 1100;
+/**
+ * Radios de streaming. El de fisicas es MAYOR que el de render, y la funcion lo
+ * comprueba: si no, se conduce hasta el borde del mundo de colisiones y se cae.
+ */
+const RADIOS = radiosDeStreaming();
 
 /** Altura inicial de la camara, en metros. */
 const ALTURA_INICIAL = 320;
@@ -141,7 +148,7 @@ async function arrancar() {
   // --- Escena
   const escena = new THREE.Scene();
   escena.background = new THREE.Color(0x10131a);
-  escena.fog = new THREE.Fog(0x10131a, RADIO_CARGA * 0.55, RADIO_CARGA);
+  escena.fog = new THREE.Fog(0x10131a, RADIOS.render * 0.55, RADIOS.render);
 
   escena.add(new THREE.HemisphereLight(0xbfd4ff, 0x2b2a28, 2.1));
   const sol = new THREE.DirectionalLight(0xfff2e0, 1.5);
@@ -152,7 +159,7 @@ async function arrancar() {
     62,
     window.innerWidth / window.innerHeight,
     0.5,
-    RADIO_CARGA * 1.5,
+    RADIOS.render * 1.5,
   );
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -170,7 +177,35 @@ async function arrancar() {
   camara.rotation.set(-0.85, 0, 0, 'YXZ');
 
   const controles = crearControles(camara, renderer.domElement);
-  const gestor = crearGestorDeCeldas({ escena, indice, base, origen, radioMetros: RADIO_CARGA });
+  const gestor = crearGestorDeCeldas({ escena, indice, base, origen, radioMetros: RADIOS.render });
+
+  // --- Fisicas. Es lo unico asincrono del arranque: hay que inicializar el
+  // wasm de Rapier antes de tocar nada suyo.
+  const mundoFisico = await crearMundoFisico();
+  const gestorColisiones = crearGestorDeColisiones({
+    mundoFisico,
+    indice,
+    base,
+    origen,
+    radioMetros: RADIOS.fisica,
+  });
+
+  // --- Rebase. TODO lo que ocupa un sitio en el mundo se apunta aqui, y aqui
+  // se mueve junto en el mismo fotograma. Es la regla 3 de la decision 0001
+  // convertida en estructura: no hay forma de rebasar media ciudad.
+  const rebase = crearRebase({
+    origen,
+    sujetos: [
+      gestor,
+      mundoFisico,
+      {
+        rebasar(delta) {
+          camara.position.x -= delta.x;
+          camara.position.z -= delta.z;
+        },
+      },
+    ],
+  });
 
   window.addEventListener('resize', () => {
     camara.aspect = window.innerWidth / window.innerHeight;
@@ -181,7 +216,6 @@ async function arrancar() {
   // --- Bucle. Sin `THREE.Clock`, que esta obsoleto desde r186, y sin su
   // sustituto: el reloj de un bucle son dos lineas y una resta.
   let ultimoInstante = performance.now();
-  let rebases = 0;
   let fotogramas = 0;
   let acumulado = 0;
   let fps = 0;
@@ -194,18 +228,14 @@ async function arrancar() {
     ultimoInstante = ahora;
     controles.actualizar(segundos);
 
-    // Rebase y grafo de escena se mueven en el MISMO fotograma. Cuando haya
-    // fisicas, el mundo de Rapier se mueve tambien aqui, no en el siguiente.
-    const rebase = origen.rebasarSiHaceFalta(camara.position);
-    if (rebase.rebasado) {
-      gestor.rebasar(rebase.delta);
-      camara.position.x -= rebase.delta.x;
-      camara.position.z -= rebase.delta.z;
-      rebases += 1;
-    }
+    // Grafo de escena, mundo de Rapier y camara se mueven en el MISMO
+    // fotograma, o mejor dicho en la misma llamada.
+    rebase.aplicar(camara.position);
 
     const posicion = origen.aProyectado(camara.position);
     gestor.actualizar(posicion);
+    gestorColisiones.actualizar(posicion);
+    mundoFisico.paso(segundos);
     renderer.render(escena, camara);
 
     fotogramas += 1;
@@ -223,7 +253,18 @@ async function arrancar() {
       $('m-triangulos').textContent = renderer.info.render.triangles.toLocaleString('es-ES');
       $('m-fps').textContent = fps;
       $('m-posicion').textContent = `${Math.round(posicion.este)} / ${Math.round(posicion.norte)}`;
-      $('m-rebases').textContent = rebases;
+      $('m-rebases').textContent = rebase.rebases;
+
+      // El mismo detector de fugas, para las fisicas. Los cuenta Rapier, no
+      // el visor: una contabilidad propia se equivocaria igual que el codigo
+      // que pretende vigilar.
+      $('m-celdas-fisica').textContent =
+        `${gestorColisiones.celdasEnMundo} / ${indice.totales.celdas}`;
+      $('m-colisionadores').textContent = mundoFisico.colisionadores.toLocaleString('es-ES');
+      $('m-cuerpos').textContent = mundoFisico.cuerpos.toLocaleString('es-ES');
+      $('m-retiradas').textContent = mundoFisico.pendientesDeRetirada;
+      $('m-descartados').textContent =
+        `${mundoFisico.descartados} + ${mundoFisico.rechazadosPorRapier}`;
     }
   });
 

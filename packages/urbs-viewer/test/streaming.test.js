@@ -1,7 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { celdasEnRadio, distanciaACelda, planDeCarga } from '../src/streaming.js';
+import {
+  RADIO_FISICA_POR_DEFECTO,
+  RADIO_RENDER_POR_DEFECTO,
+  celdasEnRadio,
+  distanciaACelda,
+  planDeCarga,
+  radiosDeStreaming,
+} from '../src/streaming.js';
 
 const LADO = 250;
 
@@ -89,4 +96,26 @@ test('un radio no positivo se rechaza en vez de dejar la escena vacia sin explic
   for (const basura of [0, -1, Number.NaN]) {
     assert.throws(() => celdasEnRadio(CELDAS, CENTRO, basura, LADO), /radio/);
   }
+});
+
+// --- Radios
+
+test('el radio de fisica es MAYOR que el de render, o se conduce fuera del mundo', () => {
+  const radios = radiosDeStreaming();
+
+  assert.equal(radios.render, RADIO_RENDER_POR_DEFECTO);
+  assert.equal(radios.fisica, RADIO_FISICA_POR_DEFECTO);
+  assert.ok(radios.fisica > radios.render);
+});
+
+test('un radio de fisica que no supere al de render se rechaza al arrancar', () => {
+  // Es la clase de error que no se ve hasta que alguien conduce hasta el borde
+  // y se cae. Comprobarlo cuesta una linea y se detecta en el primer fotograma.
+  assert.throws(() => radiosDeStreaming({ render: 1000, fisica: 1000 }), /MAYOR/);
+  assert.throws(() => radiosDeStreaming({ render: 1000, fisica: 800 }), /MAYOR/);
+});
+
+test('un radio que no sea un numero positivo de metros se rechaza', () => {
+  assert.throws(() => radiosDeStreaming({ render: 0 }), /render/);
+  assert.throws(() => radiosDeStreaming({ fisica: Number.NaN }), /fisica/);
 });

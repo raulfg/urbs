@@ -10,6 +10,50 @@
  * al aterrizar aparece antes el bloque de al lado que el suelo bajo los pies.
  */
 
+/** Radio de lo que se DIBUJA. Poco mas de un kilometro: cuatro celdas a la redonda. */
+export const RADIO_RENDER_POR_DEFECTO = 1100;
+
+/**
+ * Radio de lo que COLISIONA. Siempre mayor que el de render.
+ *
+ * No es un margen de cortesia. Si el mundo de fisicas acabara donde acaba lo
+ * que se ve, el coche llegaria al borde justo cuando la celda de delante aun
+ * no ha bajado, y se caeria por un agujero que ademas no se ve venir. Con el
+ * colchon, cuando pisas el ultimo suelo dibujado llevas ya una celda larga de
+ * suelo invisible por delante.
+ *
+ * El precio es bajo: las celdas del anillo de mas se descargan, se decodifican
+ * y dan cascos convexos, pero no producen ni un triangulo ni una llamada de
+ * dibujo.
+ */
+export const RADIO_FISICA_POR_DEFECTO = 1500;
+
+/**
+ * Los dos radios del streaming, con su invariante comprobada.
+ *
+ * @param {Object} [opciones]
+ * @param {number} [opciones.render]
+ * @param {number} [opciones.fisica]
+ * @returns {{render: number, fisica: number}}
+ */
+export function radiosDeStreaming(opciones = {}) {
+  const { render = RADIO_RENDER_POR_DEFECTO, fisica = RADIO_FISICA_POR_DEFECTO } = opciones;
+
+  for (const [nombre, valor] of [['render', render], ['fisica', fisica]]) {
+    if (!(Number.isFinite(valor) && valor > 0)) {
+      throw new RangeError(`radiosDeStreaming: el radio de \`${nombre}\` debe ser positivo, y es ${valor}`);
+    }
+  }
+  if (!(fisica > render)) {
+    throw new RangeError(
+      `radiosDeStreaming: el radio de \`fisica\` (${fisica}) debe ser MAYOR que el de \`render\` (${render}); ` +
+        'si no, se conduce hasta el borde del mundo de colisiones y se cae por el',
+    );
+  }
+
+  return Object.freeze({ render, fisica });
+}
+
 /**
  * Distancia de un punto proyectado a la caja de una celda. Cero si esta dentro.
  *
