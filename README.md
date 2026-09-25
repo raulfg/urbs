@@ -4,7 +4,7 @@
 
 Motor que genera ciudades jugables en navegador a partir de datos geográficos abiertos. La ciudad es un **dato de entrada**, no código: el mismo pipeline debe poder generar cualquier territorio del mundo.
 
-> Estado: hay dominio, contratos, el proveedor de OSM y el preprocesado completo — de grados a archivos de celda. Todavía no hay nada que se vea en pantalla.
+> Estado: la cadena completa funciona de punta a punta — OSM → celdas → navegador. Se puede volar sobre A Coruña. No hay físicas, ni tráfico, ni fachadas, ni terreno: lo que se ve son volúmenes extruidos sobre huellas reales.
 
 ## La idea
 
@@ -51,12 +51,15 @@ Una altura medida y una estimada valen lo mismo para extruir, pero no valen lo m
 | `urbs-core` | Dominio y contratos. Sin dependencias, sin IO, sin render |
 | `urbs-providers` | Implementaciones de fuentes: OSM, Catastro, PNOA |
 | `urbs-pipeline` | Preprocesado offline: reproyección, troceado en celdas, exportación |
+| `urbs-viewer` | Runtime en el navegador: extrusión, origen flotante y streaming por proximidad |
 
 ## Arquitectura
 
 ```
 Proveedores  ->  Preprocesado offline (Node)  ->  Celdas (~250 m)  ->  Navegador
-                 reproyección a UTM local                             three.js + Rapier
+                 reproyección a UTM local        + indice.json        three.js
+                 troceado por centroide                               extrusión en runtime
+                                                                      origen flotante
                                                                       streaming por proximidad
 ```
 
@@ -92,6 +95,58 @@ const informe = await generarCeldas({ territorio, registro });
 npm install
 npm test
 ```
+
+### Generar un territorio
+
+Un territorio es un JSON versionado, no código. Para generar otra ciudad se copia el archivo y se cambian las cuatro esquinas.
+
+```bash
+npm run generar -- territorios/marineda-casco-historico.json
+```
+
+Descarga las capas que falten (una sola petición a Overpass por área), las reproyecta a los metros del territorio, las reparte en celdas y escribe un `.urbscell` por celda con contenido más un `indice.json`.
+
+La red se toca **una vez por área**: la caché de `datos/crudos/` convierte la segunda ejecución en un preprocesado offline y reproducible. Volver a descargar es una decisión explícita (`--refrescar`), nunca un efecto lateral. Ni los datos crudos ni las celdas generadas se versionan.
+
+Esto es lo que salió del *vertical slice* real — Ciudad Vieja, Pescadería y Orzán, `[-8,42 · 43,36]` a `[-8,39 · 43,38]`— el 25 de septiembre de 2026, con datos de OSM con corte `2026-09-25T11:53:03Z`:
+
+| | |
+| :---- | ----: |
+| Descarga de Overpass | 8.746.226 B (8,3 MiB) |
+| Celdas escritas | 90 |
+| Edificios | 5.459 |
+| Tramos de vía | 2.882 |
+| Total en disco | 1.292.862 B (1,23 MiB) |
+| Celda media | 14,0 KiB |
+| Celda mayor | `x2196z19208` — 49,8 KiB, 250 edificios |
+
+Las celdas pesan **147 veces menos** que el JSON de Overpass del que salen.
+
+De los 5.459 edificios, **17 declaran su altura y 5.442 la tienen estimada** a partir de las plantas o del tipo. Noventa tienen patio, así que la triangulación con huecos la ejercita el dato real, no un caso de prueba. Las capas de `relieve` y `suelo` no tienen proveedor todavía: se anotan en el informe y la generación sigue.
+
+Fuente de ambas capas: `osm-edificios` y `osm-viario`. Atribución obligatoria, calculada a partir de los proveedores que cubren el área: **© colaboradores de OpenStreetMap — ODbL 1.0**.
+
+### Ver el territorio
+
+```bash
+npm run visor
+```
+
+Abre <http://localhost:4173>. El visor es ESM nativo, sin empaquetador y sin paso de compilación: un mapa de importaciones resuelve `three`, `earcut` y `urbs-core`, y el servidor —sesenta líneas de `node:http`, sin dependencias— sirve la raíz del repo con los tipos MIME correctos.
+
+Clic para tomar el ratón, `WASD` para moverse, `R`/`F` para subir y bajar, `Mayús` para acelerar, `Esc` para soltar.
+
+El panel de la esquina no es decoración. `Geometrías GPU` muestra `renderer.info.memory.geometries`, que es el detector de fugas más barato que existe: alejándose del territorio baja a **cero**, y al volver recupera exactamente el mismo número. `Rebases` cuenta las veces que el origen flotante se ha mudado bajo la cámara.
+
+El color de cada edificio dice la **confianza** de su altura: lo declarado por la fuente y lo estimado por el motor se distinguen de un vistazo.
+
+#### Lo que hace el visor, y lo que no
+
+Extruye las huellas **en tiempo de ejecución**. Lo que viaja en una celda son datos, no mallas cocidas, así que las reglas de fachada se podrán retocar sin regenerar el territorio.
+
+Ninguna coordenada UTM absoluta llega a la GPU: cada celda se coloca en `origen de celda − ancla`, con el ancla en `float64` viajando con la cámara (decisión 0001, capa 2). El ancla se recalcula en absolutos en cada rebase en lugar de acumular desplazamientos, así que mil rebases no dejan deriva.
+
+**No** hay físicas, tráfico, fachadas procedurales, texturas, terreno ni ortofoto. Nada de eso entra en este hito.
 
 ## Convenciones
 
