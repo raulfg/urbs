@@ -208,3 +208,76 @@ export function bordesDeCalzada(eje, anchura, opciones = {}) {
 
   return { eje: ejeSalida, derecha, izquierda };
 }
+
+/** Un tramo mas corto que esto no es sitio donde arrancar, por ancho que sea. */
+export const LARGO_MINIMO_SALIDA = 15;
+
+/**
+ * Donde plantar el coche dentro de una celda: sobre su calle MAS ANCHA.
+ *
+ * Nacer en el centro geometrico de una celda del casco viejo es nacer dentro de
+ * un edificio una de cada dos veces, y un coche que aparece dentro de un casco
+ * convexo sale disparado o se queda encajado.
+ *
+ * Se ordena por ANCHURA y no por longitud, y eso se aprendio mirando: con el
+ * tramo mas largo, el coche arrancaba, recorria seis metros y se clavaba contra
+ * una fachada. En un casco medieval las calles largas son callejones de tres
+ * metros, y ademas el colisionador de un edificio es su casco CONVEXO, que
+ * rellena escotaduras y se come todavia mas hueco. Lo que decide si un coche
+ * cabe es el ancho, no el largo.
+ *
+ * Entre los tramos igual de anchos gana el mas largo, y se descartan los que no
+ * lleguen a `LARGO_MINIMO_SALIDA`: una avenida de doce metros partida en un
+ * tocon de dos no es sitio donde empezar.
+ *
+ * Se devuelve tambien la guinada del tramo, para que el coche nazca mirando a
+ * lo largo de la calle y no de traves contra una fachada.
+ *
+ * @param {Object} vistas  Lo que devuelve `vistasDeCelda`
+ * @returns {{x: number, z: number, guinada: number, anchura: number}|null}
+ */
+export function puntoDeSalida(vistas) {
+  const { cabecera, tramos } = vistas;
+
+  let mejorAnchura = -1;
+  let mejorLargo = 0;
+  let mejor = null;
+
+  for (let i = 0; i < cabecera.numeroTramos; i += 1) {
+    const desde = tramos.inicioVertice[i];
+    const hasta = tramos.inicioVertice[i + 1];
+    const anchura = tramos.anchura[i];
+
+    for (let v = desde; v + 1 < hasta; v += 1) {
+      const e1 = tramos.vertices[v * 2];
+      const n1 = tramos.vertices[v * 2 + 1];
+      const e2 = tramos.vertices[(v + 1) * 2];
+      const n2 = tramos.vertices[(v + 1) * 2 + 1];
+
+      const de = e2 - e1;
+      const dn = n2 - n1;
+      const largo = Math.hypot(de, dn);
+      if (largo < LARGO_MINIMO_SALIDA) {
+        continue;
+      }
+      if (anchura < mejorAnchura || (anchura === mejorAnchura && largo <= mejorLargo)) {
+        continue;
+      }
+
+      mejorAnchura = anchura;
+      mejorLargo = largo;
+      // Centro del segmento: el punto mas lejos de cualquiera de sus dos
+      // extremos, que es donde menos probable es haber pillado un cruce.
+      mejor = {
+        x: (e1 + e2) / 2,
+        z: -(n1 + n2) / 2,
+        // Guinada cero mira al norte (-Z), asi que una direccion (de, dn)
+        // corresponde a `atan2(de, dn)`.
+        guinada: Math.atan2(de, dn),
+        anchura,
+      };
+    }
+  }
+
+  return mejor;
+}

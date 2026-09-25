@@ -6,6 +6,7 @@ import {
   PROLONGACION_EXTREMO,
   bordesDeCalzada,
   limpiarEje,
+  puntoDeSalida,
 } from '../src/calzada.js';
 
 /** Los bordes salen en float32; cualquier comparacion necesita holgura. */
@@ -213,4 +214,79 @@ test('una anchura que no sea positiva se rechaza en vez de dar una cinta invisib
 
 test('un limite de inglete por debajo de uno se rechaza: encogeria la calzada', () => {
   assert.throws(() => bordesDeCalzada([0, 0, 10, 0], 10, { limiteInglete: 0.5 }), /limiteInglete/);
+});
+
+// --- Punto de salida
+
+test('el coche sale sobre el tramo mas largo de la celda, no en el centro', () => {
+  // Nacer en el centro geometrico de una celda es nacer dentro de un edificio
+  // uno de cada dos intentos. El tramo mas largo es lo mas parecido a "una
+  // calle por la que se puede empezar a rodar" que hay en el dato.
+  const salida = puntoDeSalida({
+    cabecera: { numeroTramos: 2 },
+    tramos: {
+      inicioVertice: Uint32Array.from([0, 2, 4]),
+      vertices: Float32Array.from([10, 10, 20, 10, 0, 100, 0, 200]),
+      anchura: Float32Array.from([8, 8]),
+    },
+  });
+
+  // El segundo tramo mide 100 m y el primero 10: gana el segundo, y el punto
+  // es su centro.
+  assert.ok(Math.abs(salida.x - 0) < HOLGURA);
+  assert.ok(Math.abs(salida.z - -150) < HOLGURA);
+});
+
+test('el coche sale mirando a lo largo de la calle, no de traves', () => {
+  // Tramo que va al este: el coche tiene que mirar al este.
+  const salida = puntoDeSalida({
+    cabecera: { numeroTramos: 1 },
+    tramos: {
+      inicioVertice: Uint32Array.from([0, 2]),
+      vertices: Float32Array.from([0, 0, 100, 0]),
+      anchura: Float32Array.from([8]),
+    },
+  });
+
+  // Guinada cero mira al norte (-Z); mirar al este son noventa grados.
+  assert.ok(Math.abs(salida.guinada - Math.PI / 2) < HOLGURA);
+});
+
+test('una celda sin viario no da punto de salida', () => {
+  const salida = puntoDeSalida({
+    cabecera: { numeroTramos: 0 },
+    tramos: { inicioVertice: Uint32Array.from([0]), vertices: new Float32Array(0), anchura: new Float32Array(0) },
+  });
+
+  assert.equal(salida, null);
+});
+
+test('entre dos calles, el coche sale en la MAS ANCHA aunque sea mas corta', () => {
+  // Aprendido mirando la pantalla: con el tramo mas largo el coche arrancaba
+  // en un callejon del casco viejo y se clavaba contra una fachada a los seis
+  // metros. Lo que decide si un coche cabe es el ancho.
+  const salida = puntoDeSalida({
+    cabecera: { numeroTramos: 2 },
+    tramos: {
+      inicioVertice: Uint32Array.from([0, 2, 4]),
+      vertices: Float32Array.from([0, 0, 0, 200, 50, 0, 50, 40]),
+      anchura: Float32Array.from([3, 14]),
+    },
+  });
+
+  assert.equal(salida.anchura, 14);
+  assert.ok(Math.abs(salida.x - 50) < HOLGURA);
+});
+
+test('un tocon corto no vale de salida por ancho que sea', () => {
+  const salida = puntoDeSalida({
+    cabecera: { numeroTramos: 2 },
+    tramos: {
+      inicioVertice: Uint32Array.from([0, 2, 4]),
+      vertices: Float32Array.from([0, 0, 0, 5, 50, 0, 50, 90]),
+      anchura: Float32Array.from([20, 6]),
+    },
+  });
+
+  assert.equal(salida.anchura, 6, 'el tramo de 20 m de ancho solo mide 5 m de largo');
 });

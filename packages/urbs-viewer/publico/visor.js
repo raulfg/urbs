@@ -12,14 +12,24 @@
 
 import * as THREE from 'three';
 
+import { vistasDeCelda } from 'urbs-core';
+
+import {
+  CONSTANTE_PERSECUCION,
+  ADELANTO_MIRADA,
+  factorDeSuavizado,
+  puntoDePersecucion,
+} from '../src/camara-persecucion.js';
 import { COLOR_POR_CONFIANZA } from '../src/geometria.js';
+import { puntoDeSalida } from '../src/calzada.js';
+import { ALTURA_REPOSO, crearCoche } from './coche.js';
 import { crearGestorDeCeldas } from './gestor-celdas.js';
 import { crearGestorDeColisiones } from './gestor-colisiones.js';
 import { crearMundoFisico } from './mundo-fisico.js';
-import { crearOrigenFlotante } from '../src/origen-flotante.js';
+import { crearOrigenFlotante, desplazamientoDeCelda } from '../src/origen-flotante.js';
 import { crearRebase } from '../src/rebase.js';
 import { radiosDeStreaming } from '../src/streaming.js';
-import { crearControles } from './controles.js';
+import { ALTURA_MINIMA, crearControles } from './controles.js';
 
 /** Territorio que se abre por defecto; `?territorio=` lo cambia. */
 const TERRITORIO_POR_DEFECTO = 'marineda-casco-historico';
@@ -40,8 +50,27 @@ const NOMBRE_INDICE = 'indice.json';
  */
 const RADIOS = radiosDeStreaming();
 
-/** Altura inicial de la camara, en metros. */
-const ALTURA_INICIAL = 320;
+/**
+ * El plano de apertura.
+ *
+ * El MVP arrancaba a 320 m mirando 49 grados hacia abajo, y desde ahi esta
+ * ciudad no se ve: la mediana de sus edificios son 18 m, o sea que la camara
+ * estaba a DIECIOCHO VECES la altura de lo que venia a ensenar. Lo que se veia
+ * eran tejados, y los tejados no cuentan la altura de nada. Entre el primer y
+ * el tercer cuartil hay 9 m de diferencia, y 9 m a 320 m de distancia no son
+ * nada.
+ *
+ * La altura la cuentan las FACHADAS recortadas contra el cielo. Por eso ahora
+ * se arranca a 55 m —unas tres veces la mediana, suficiente para ver por encima
+ * de la primera manzana sin perder el perfil de las de detras— y con solo 17
+ * grados de cabeceo, que deja media pantalla de horizonte. Valores elegidos
+ * mirando la pantalla, no dividiendo el numero anterior.
+ *
+ * Esto es el plano de APERTURA. La camara libre sigue subiendo todo lo que se
+ * quiera con R, y el plano lejano no se ha tocado.
+ */
+const ALTURA_INICIAL = 55;
+const CABECEO_INICIAL = -0.3;
 
 const $ = (id) => document.getElementById(id);
 
@@ -113,15 +142,65 @@ function pintarLeyenda(indice) {
  * @param {Object} indice
  * @returns {{este: number, norte: number}}
  */
+function celdaMasDensa(indice) {
+  return indice.celdas.reduce((mejor, celda) => (celda.edificios > mejor.edificios ? celda : mejor));
+}
+
+/**
+ * @param {Object} indice
+ * @returns {{este: number, norte: number}}
+ */
 function centroUrbano(indice) {
   const lado = indice.territorio.ladoCeldaMetros;
-  const densa = indice.celdas.reduce((mejor, celda) =>
-    celda.edificios > mejor.edificios ? celda : mejor,
-  );
+  const densa = celdaMasDensa(indice);
   return {
     este: densa.origen.este + lado / 2,
     norte: densa.origen.norte + lado / 2,
   };
+}
+
+/**
+ * Donde aparece el coche: sobre la calle mas larga de la celda mas densa.
+ *
+ * Se baja esa celda una vez, solo para esto. Plantar el coche en el centro de
+ * la celda seria plantarlo dentro de un edificio una de cada dos veces, y un
+ * cuerpo dinamico que nace dentro de un casco convexo sale disparado.
+ *
+ * @param {Object} indice
+ * @param {string} base
+ * @param {ReturnType<import('../src/origen-flotante.js').crearOrigenFlotante>} origen
+ * @returns {Promise<{posicion: {x: number, y: number, z: number}, guinada: number}>}
+ */
+async function plazaDeSalida(indice, base, origen) {
+  const celda = celdaMasDensa(indice);
+  const desplazamiento = desplazamientoDeCelda(celda.origen, origen.ancla);
+  // A su altura de reposo mas un palmo: cae esos centimetros y la suspension
+  // se asienta sola, en vez de nacer encajada o con las ruedas en el aire.
+  const altura = ALTURA_REPOSO + 0.2;
+  const reposo = { posicion: { x: desplazamiento.x, y: altura, z: desplazamiento.z }, guinada: 0 };
+
+  try {
+    const respuesta = await fetch(`${base}/${celda.archivo}`);
+    if (!respuesta.ok) {
+      return reposo;
+    }
+    const salida = puntoDeSalida(vistasDeCelda(await respuesta.arrayBuffer()));
+    if (salida === null) {
+      return reposo;
+    }
+    return {
+      posicion: {
+        x: desplazamiento.x + salida.x,
+        y: altura,
+        z: desplazamiento.z + salida.z,
+      },
+      guinada: salida.guinada,
+    };
+  } catch {
+    // Que el coche no tenga una calle bonita donde nacer no es motivo para no
+    // arrancar el visor.
+    return reposo;
+  }
 }
 
 async function arrancar() {
@@ -150,6 +229,24 @@ async function arrancar() {
   escena.background = new THREE.Color(0x10131a);
   escena.fog = new THREE.Fog(0x10131a, RADIOS.render * 0.55, RADIOS.render);
 
+  // --- Suelo. Hasta ahora la ciudad flotaba sobre un vacio negro: sin un plano
+  // debajo no hay donde apoyar la vista, las manzanas parecen recortes pegados
+  // sobre la nada y cuesta reconocer el sitio aunque sea tu barrio.
+  //
+  // Es un plano LLANO, y eso no es un descuido: todavia no hay modelo digital
+  // del terreno, asi que A Coruna —que tiene cuestas de verdad— sale plana. El
+  // relieve es el siguiente hito, no este.
+  //
+  // No se rebasa nunca, igual que su gemelo de fisicas: es uniforme e infinito
+  // en intencion, asi que dejarlo clavado en el origen de la escena equivale a
+  // que siga al jugador y no se acabe jamas.
+  const suelo = new THREE.Mesh(
+    new THREE.PlaneGeometry(RADIOS.render * 4, RADIOS.render * 4),
+    new THREE.MeshLambertMaterial({ color: 0x6e7176 }),
+  );
+  suelo.rotation.x = -Math.PI / 2;
+  escena.add(suelo);
+
   escena.add(new THREE.HemisphereLight(0xbfd4ff, 0x2b2a28, 2.1));
   const sol = new THREE.DirectionalLight(0xfff2e0, 1.5);
   sol.position.set(-0.6, 1, 0.45);
@@ -174,7 +271,7 @@ async function arrancar() {
   const origen = crearOrigenFlotante({ ancla: centro });
 
   camara.position.set(0, ALTURA_INICIAL, 0);
-  camara.rotation.set(-0.85, 0, 0, 'YXZ');
+  camara.rotation.set(CABECEO_INICIAL, 0, 0, 'YXZ');
 
   const controles = crearControles(camara, renderer.domElement);
   const gestor = crearGestorDeCeldas({ escena, indice, base, origen, radioMetros: RADIOS.render });
@@ -207,6 +304,56 @@ async function arrancar() {
     ],
   });
 
+  // --- Coche. Nace despues del mundo, asi que se apunta al rebase a mano.
+  const plaza = await plazaDeSalida(indice, base, origen);
+  const coche = crearCoche({ escena, mundoFisico, ...plaza });
+  rebase.apuntar(coche);
+
+  // --- Modos. La camara libre y la de persecucion comparten la misma camara;
+  // lo que cambia es quien la mueve.
+  let conduciendo = false;
+  const mirada = new THREE.Vector3();
+  const deseoDeCamara = new THREE.Vector3();
+
+  /**
+   * Pone la camara detras del coche AHORA MISMO, sin suavizado.
+   *
+   * Al entrar en el coche la camara puede estar a un kilometro y trescientos
+   * metros de altura. Suavizar desde ahi seria un viaje de varios segundos por
+   * encima de la ciudad, y lo unico que ha pedido quien pulsa la tecla es
+   * conducir. Salir del coche, en cambio, NO recoloca nada: la camara libre
+   * arranca justo donde estaba, que es lo menos desorientador que hay.
+   *
+   * @returns {void}
+   */
+  function pegarCamaraAlCoche() {
+    const punto = puntoDePersecucion(coche.posicion, coche.guinada);
+    camara.position.set(punto.x, punto.y, punto.z);
+  }
+
+  function cambiarModo() {
+    conduciendo = !conduciendo;
+    controles.activo = !conduciendo;
+    if (conduciendo) {
+      pegarCamaraAlCoche();
+    } else {
+      // La camara libre adopta hacia donde estaba mirando la de persecucion.
+      controles.sincronizar();
+    }
+    $('modo').textContent = conduciendo ? 'Conduciendo' : 'Volando';
+    $('ayuda-vuelo').hidden = conduciendo;
+    $('ayuda-coche').hidden = !conduciendo;
+  }
+
+  window.addEventListener('keydown', (evento) => {
+    if (evento.code === 'KeyC') {
+      cambiarModo();
+    }
+    if (evento.code === 'KeyR' && conduciendo) {
+      coche.enderezar();
+    }
+  });
+
   window.addEventListener('resize', () => {
     camara.aspect = window.innerWidth / window.innerHeight;
     camara.updateProjectionMatrix();
@@ -226,13 +373,58 @@ async function arrancar() {
     // la camara se iria al otro lado de la ciudad de golpe.
     const segundos = Math.min((ahora - ultimoInstante) / 1000, 0.1);
     ultimoInstante = ahora;
-    controles.actualizar(segundos);
 
-    // Grafo de escena, mundo de Rapier y camara se mueven en el MISMO
-    // fotograma, o mejor dicho en la misma llamada.
-    rebase.aplicar(camara.position);
+    // La camara libre pide moverse y el mundo de colisiones dice cuanto cabe.
+    // Volar ya no atraviesa fachadas, y al rozar una manzana se desliza.
+    if (!conduciendo) {
+      controles.actualizar(segundos, deseoDeCamara);
+      if (deseoDeCamara.lengthSq() > 0) {
+        const cabe = mundoFisico.moverCamara(camara.position, deseoDeCamara);
+        camara.position.x += cabe.x;
+        camara.position.y += cabe.y;
+        camara.position.z += cabe.z;
+      }
+      camara.position.y = Math.max(camara.position.y, ALTURA_MINIMA);
+    }
 
-    const posicion = origen.aProyectado(camara.position);
+    if (conduciendo) {
+      coche.actualizar(
+        {
+          acelera: controles.pulsada('KeyW'),
+          frena: controles.pulsada('KeyS'),
+          izquierda: controles.pulsada('KeyA'),
+          derecha: controles.pulsada('KeyD'),
+        },
+        segundos,
+      );
+    }
+
+    // Grafo de escena, mundo de Rapier, coche y camara se mueven en el MISMO
+    // fotograma, o mejor dicho en la misma llamada. El rebase se mide por
+    // donde este el jugador, que conduciendo es el coche y volando la camara.
+    rebase.aplicar(conduciendo ? coche.posicion : camara.position);
+
+    if (conduciendo) {
+      // La camara persigue DESPUES del rebase, para no perseguir un fotograma
+      // al sitio viejo del coche.
+      const deseado = puntoDePersecucion(coche.posicion, coche.guinada);
+      const factor = factorDeSuavizado(segundos, CONSTANTE_PERSECUCION);
+      camara.position.lerp(new THREE.Vector3(deseado.x, deseado.y, deseado.z), factor);
+      // Tambien aqui: si el coche vuelca, la camara ideal se va por debajo del
+      // suelo y lo unico que se ve es la cara de atras del plano.
+      camara.position.y = Math.max(camara.position.y, ALTURA_MINIMA);
+
+      const frente = coche.posicion;
+      const guinada = coche.guinada;
+      mirada.set(
+        frente.x + Math.sin(guinada) * ADELANTO_MIRADA,
+        frente.y + 1,
+        frente.z - Math.cos(guinada) * ADELANTO_MIRADA,
+      );
+      camara.lookAt(mirada);
+    }
+
+    const posicion = origen.aProyectado(conduciendo ? coche.posicion : camara.position);
     gestor.actualizar(posicion);
     gestorColisiones.actualizar(posicion);
     mundoFisico.paso(segundos);
@@ -265,6 +457,8 @@ async function arrancar() {
       $('m-retiradas').textContent = mundoFisico.pendientesDeRetirada;
       $('m-descartados').textContent =
         `${mundoFisico.descartados} + ${mundoFisico.rechazadosPorRapier}`;
+      $('m-velocidad').textContent = `${Math.round(Math.abs(coche.velocidad) * 3.6)} km/h`;
+      $('m-ruedas').textContent = `${coche.ruedasEnSuelo} / 4`;
     }
   });
 

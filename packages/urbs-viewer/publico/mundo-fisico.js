@@ -42,6 +42,9 @@ export const GROSOR_SUELO = 20;
 /** Cuantas retiradas se hacen como mucho por fotograma. */
 export const RETIRADAS_POR_FOTOGRAMA = 96;
 
+/** Radio del volumen de la camara libre, en metros. */
+export const RADIO_CAMARA = 0.6;
+
 /** Paso fijo de la simulacion y tope de subpasos por fotograma. */
 export const PASO_FIJO = 1 / 60;
 const SUBPASOS_MAXIMOS = 3;
@@ -74,6 +77,23 @@ export async function crearMundoFisico(opciones = {}) {
       .setFriction(1.4),
     cuerpoSuelo,
   );
+
+  // --- Volumen de la camara libre.
+  //
+  // La camara no es un cuerpo fisico y por eso atravesaba las fachadas. Se le
+  // da una bola cinematica y un controlador de personaje: en vez de moverla a
+  // pelo, se le pide a Rapier cuanto de ese movimiento CABE. El controlador
+  // ademas desliza a lo largo de la pared en vez de clavarse, que es lo que
+  // hace que volar pegado a una manzana no sea una pelea.
+  //
+  // Sin gravedad, sin pegado al suelo y sin escalones: no es un peaton, es una
+  // camara que vuela y a la que la ciudad le resulta solida.
+  const controladorCamara = mundo.createCharacterController(0.02);
+  controladorCamara.setUp({ x: 0, y: 1, z: 0 });
+  controladorCamara.setApplyImpulsesToDynamicBodies(false);
+
+  const cuerpoCamara = mundo.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased());
+  const bolaCamara = mundo.createCollider(RAPIER.ColliderDesc.ball(RADIO_CAMARA), cuerpoCamara);
 
   /** @type {Map<string, {cuerpo: any, colisionadores: any[]}>} */
   const celdas = new Map();
@@ -133,6 +153,25 @@ export async function crearMundoFisico(opciones = {}) {
      */
     tieneCelda(clave) {
       return celdas.has(clave);
+    },
+
+    /**
+     * Cuanto de un movimiento de la camara libre cabe sin atravesar nada.
+     *
+     * Devuelve el movimiento YA RECORTADO y deslizado. Quien llama lo suma a la
+     * camara: el volumen se coloca donde diga la camara, no al reves, para que
+     * un teletransporte (entrar y salir del coche) no arrastre el volumen por
+     * media ciudad chocando con todo.
+     *
+     * @param {{x: number, y: number, z: number}} desde  Posicion actual de la camara
+     * @param {{x: number, y: number, z: number}} deseado  Desplazamiento que se pide
+     * @returns {{x: number, y: number, z: number}}
+     */
+    moverCamara(desde, deseado) {
+      cuerpoCamara.setNextKinematicTranslation(desde);
+      cuerpoCamara.setTranslation(desde, false);
+      controladorCamara.computeColliderMovement(bolaCamara, deseado);
+      return controladorCamara.computedMovement();
     },
 
     /**
