@@ -23,6 +23,41 @@ export const TipoVia = Object.freeze({
 const TIPOS_VALIDOS = new Set(Object.values(TipoVia));
 
 /**
+ * Tipos que admiten trafico rodado.
+ *
+ * Vive en el dominio, y no junto al lector de etiquetas de OSM, porque la
+ * pregunta "¿por aqui pasa un coche?" no la hace solo quien ingiere: la hacen
+ * el grafo del trafico, el sitio donde aparece el coche y, sobre todo, quien
+ * pinta. Estaba escrito en `urbs-providers`, exportado y probado, y no lo
+ * llamaba nadie fuera de sus propios tests, porque el visor no importa
+ * `urbs-providers`. Resultado medido: 241 km de acera pintados con el mismo
+ * asfalto que una autopista, el 48% de la superficie de calzada del slice.
+ */
+const TIPOS_CONDUCIBLES = new Set([
+  TipoVia.AUTOPISTA,
+  TipoVia.PRIMARIA,
+  TipoVia.SECUNDARIA,
+  TipoVia.LOCAL,
+  TipoVia.RESIDENCIAL,
+  TipoVia.SERVICIO,
+]);
+
+/**
+ * Si por un tipo de via pasa un coche.
+ *
+ * Es un predicado aparte del tipo a proposito: el tipo DESCRIBE la via, esto
+ * DECIDE si entra en el asfalto conducible. Un tipo desconocido no se conduce,
+ * porque meter el coche en algo de lo que no se sabe nada es peor que pintarlo
+ * de acera.
+ *
+ * @param {string} tipo
+ * @returns {boolean}
+ */
+export function esTipoConducible(tipo) {
+  return TIPOS_CONDUCIBLES.has(tipo);
+}
+
+/**
  * Como se apoya un vial respecto al terreno.
  *
  * No es un adorno para el render: es la diferencia entre una ciudad que se

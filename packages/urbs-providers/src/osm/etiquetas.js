@@ -17,6 +17,7 @@ import {
   TipoVia,
   UsoEdificio,
   ALTURA_PLANTA_POR_DEFECTO,
+  esTipoConducible,
   resolverAnchura,
 } from 'urbs-core';
 
@@ -96,16 +97,6 @@ const HIGHWAY_CONDUCIBLE = new Set([
   'living_street',
   'service',
   'track',
-]);
-
-/** Tipos de dominio que admiten trafico rodado. */
-const TIPO_CONDUCIBLE = new Set([
-  TipoVia.AUTOPISTA,
-  TipoVia.PRIMARIA,
-  TipoVia.SECUNDARIA,
-  TipoVia.LOCAL,
-  TipoVia.RESIDENCIAL,
-  TipoVia.SERVICIO,
 ]);
 
 /**
@@ -389,16 +380,11 @@ export function esConducible(etiquetas) {
   return true;
 }
 
-/**
- * Version del predicado anterior que solo necesita el tipo del dominio, para
- * filtrar tramos ya transformados sin volver a las etiquetas de origen.
- *
- * @param {string} tipo
- * @returns {boolean}
- */
-export function esTipoConducible(tipo) {
-  return TIPO_CONDUCIBLE.has(tipo);
-}
+// La version que solo necesita el tipo del dominio vive EN el dominio, y aqui
+// solo se reexporta. Tenerla aqui la dejaba fuera del alcance del visor, que
+// no importa `urbs-providers`, y asi es como el render acabo pintando las
+// aceras con el mismo asfalto que las autopistas.
+export { esTipoConducible };
 
 /**
  * Uso dominante del edificio. Si `building` no lo dice (el clasico

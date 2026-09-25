@@ -38,6 +38,9 @@ Ha mordido cuatro veces, y son los únicos fallos de verdad duros que ha dado es
 2. **La cámara iba delante del coche.** `punto.x === -DISTANCIA` afirmaba un signo escrito a mano. Se cazó midiendo el cuaternión del chasis en el navegador.
 3. **Guiñada de spawn.** Comparaba un ángulo y el signo se coló dos veces. Se arregló comparando el **vector adelante** que produce la guiñada.
 4. **Conectividad del agua.** Escrita y testeada, y nunca llamada: inundó 18,68 ha de tierra seca.
+5. **`esTipoConducible`.** Escrito, exportado y testeado en `urbs-providers`, y no lo llamaba nadie fuera de sus propios tests, porque el visor no importa ese paquete. La investigación de OSM ya lo había medido y avisado —«más de la mitad de las vías son `footway`, `steps` o `pedestrian`»— y la regla se aplicó al grafo del tráfico y nunca al render: 241 km de acera pintados con el mismo asfalto que una autopista, el 48% de la superficie de calzada.
+
+Los cinco tienen la misma forma: **la regla correcta existía, se aplicó por un lado y no por el otro.** Si dos sitios necesitan la misma decisión, que sea **una sola función con un solo nombre** a la que llamen los dos, y que viva donde ambos alcancen. Dos reglas que hoy coinciden acaban divergiendo; una sola función no puede.
 
 **Nombra los tests por el síntoma que reportaría quien juega, no por la fórmula.** `el orden COINCIDE` es exactamente lo que desanima a tocar la línea equivocada; `el coche conduce sobre un terreno espejado` no.
 

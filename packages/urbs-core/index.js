@@ -18,6 +18,7 @@ export {
   NIVEL_MAXIMO,
   TipoVia,
   crearTramo,
+  esTipoConducible,
   resolverAnchura,
   ANCHURA_POR_TIPO,
   ANCHURA_CARRIL,
