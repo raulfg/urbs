@@ -249,8 +249,12 @@ async function arrancar() {
 
   // --- Escena
   const escena = new THREE.Scene();
-  escena.background = new THREE.Color(0x10131a);
-  escena.fog = new THREE.Fog(0x10131a, RADIOS.render * 0.55, RADIOS.render);
+  // Cielo y niebla del MISMO color, y de dia. Con un cielo casi negro sobre una
+  // ciudad iluminada, el horizonte era un corte duro entre la ciudad y la nada;
+  // igualando los dos, lo lejano se desvanece en el cielo y deja de haber borde.
+  const BRUMA = 0x93a7bb;
+  escena.background = new THREE.Color(BRUMA);
+  escena.fog = new THREE.Fog(BRUMA, RADIOS.render * 0.25, RADIOS.render * 1.1);
 
   // --- Suelo. Hasta ahora la ciudad flotaba sobre un vacio negro: sin un plano
   // debajo no hay donde apoyar la vista, las manzanas parecen recortes pegados
