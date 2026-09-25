@@ -24,3 +24,7 @@ export {
   EXTENSION_CELDA,
   generarCeldas,
 } from './src/generar.js';
+
+export { territorioDesdeDefinicion, cargarDefinicion } from './src/territorios.js';
+
+export { VERSION_INDICE, NOMBRE_INDICE, construirIndice } from './src/indice.js';

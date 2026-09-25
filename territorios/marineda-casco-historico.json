@@ -1,0 +1,12 @@
+{
+  "id": "marineda-casco-historico",
+  "nombre": "Marineda - Ciudad Vieja, Pescaderia y Orzan",
+  "area": {
+    "lonMin": -8.42,
+    "latMin": 43.36,
+    "lonMax": -8.39,
+    "latMax": 43.38
+  },
+  "ladoCeldaMetros": 250,
+  "notas": "Vertical slice de A Coruna: la peninsula del casco historico, Pescaderia y la playa del Orzan. Unos 2,4 x 2,2 km, de los que mas de la mitad es mar. El EPSG no se fija: se deduce del centro del area (ETRS89 / UTM 29N). Para generar otra ciudad se copia este archivo y se cambian las cuatro esquinas."
+}

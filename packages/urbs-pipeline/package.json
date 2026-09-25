@@ -14,5 +14,13 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js"
+  },
+  "files": [
+    "index.js",
+    "bin/",
+    "src/"
+  ],
+  "bin": {
+    "urbs-generar": "bin/generar.js"
   }
 }
