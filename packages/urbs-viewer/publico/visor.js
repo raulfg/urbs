@@ -22,6 +22,7 @@ import {
 } from '../src/camara-persecucion.js';
 import { COLOR_POR_CONFIANZA } from '../src/geometria.js';
 import { puntosDeSalida } from '../src/calzada.js';
+import { cotaEnCelda } from '../src/terreno.js';
 import { ALTO, ALTURA_REPOSO, ANCHO, LARGO, crearCoche } from './coche.js';
 import { crearGestorDeCeldas } from './gestor-celdas.js';
 import { crearGestorDeColisiones } from './gestor-colisiones.js';
@@ -188,11 +189,24 @@ async function plazaDeSalida(indice, base, origen, mundoFisico) {
       return reposo;
     }
 
-    const candidatos = puntosDeSalida(vistasDeCelda(await respuesta.arrayBuffer()));
+    const vistas = vistasDeCelda(await respuesta.arrayBuffer());
+    const candidatos = puntosDeSalida(vistas);
+    // El coche nace SOBRE el terreno, no sobre la cota cero: con la ciudad a
+    // cuarenta metros, nacer en cero es nacer enterrado.
+    const relieve =
+      vistas.relieve.postes >= 2
+        ? {
+            cotas: vistas.relieve.cotas,
+            cotaBase: vistas.relieve.cotaBase,
+            postes: vistas.relieve.postes,
+            pasoMetros: vistas.relieve.pasoMetros,
+          }
+        : null;
     for (const salida of candidatos) {
+      const suelo = relieve === null ? 0 : cotaEnCelda(relieve, salida.x, -salida.z) ?? 0;
       const posicion = {
         x: desplazamiento.x + salida.x,
-        y: altura,
+        y: suelo + altura,
         z: desplazamiento.z + salida.z,
       };
       // Estar sobre el eje de una calle NO garantiza estar en hueco libre: el
@@ -254,11 +268,16 @@ async function arrancar() {
   // No se rebasa nunca, igual que su gemelo de fisicas: es uniforme e infinito
   // en intencion, asi que dejarlo clavado en el origen de la escena equivale a
   // que siga al jugador y no se acabe jamas.
+  // Ya NO hay plano llano: el suelo es la malla de relieve de cada celda, que
+  // ademas trae el mar puesto —el MDT lo da como cota baja y se pinta distinto—.
+  // Lo unico que queda plano es el respaldo de mas alla del radio de carga, y
+  // de eso se encarga la niebla.
   const suelo = new THREE.Mesh(
     new THREE.PlaneGeometry(RADIOS.render * 4, RADIOS.render * 4),
-    new THREE.MeshLambertMaterial({ color: 0x6e7176 }),
+    new THREE.MeshLambertMaterial({ color: 0x28323e }),
   );
   suelo.rotation.x = -Math.PI / 2;
+  suelo.position.y = -2;
   escena.add(suelo);
 
   escena.add(new THREE.HemisphereLight(0xbfd4ff, 0x2b2a28, 2.1));

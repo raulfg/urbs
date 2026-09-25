@@ -202,7 +202,7 @@ export async function crearMundoFisico(opciones = {}) {
      * @param {{x: number, z: number}} desplazamiento
      * @returns {void}
      */
-    anadirCelda(clave, colisiones, desplazamiento) {
+    anadirCelda(clave, colisiones, desplazamiento, terreno = null) {
       if (celdas.has(clave)) {
         return;
       }
@@ -215,6 +215,29 @@ export async function crearMundoFisico(opciones = {}) {
       );
 
       const colisionadores = [];
+
+      // El terreno de la celda, como campo de alturas. Es LA MISMA malla que se
+      // dibuja: el coche pisa exactamente la superficie que se ve, y no hay una
+      // segunda version del suelo que pueda discrepar de la primera.
+      if (terreno !== null && terreno.postes >= 2) {
+        const filas = terreno.postes - 1;
+        const lado = filas * terreno.pasoMetros;
+        colisionadores.push(
+          mundo.createCollider(
+            RAPIER.ColliderDesc.heightfield(filas, filas, terreno.alturas, {
+              x: lado,
+              y: 1,
+              z: lado,
+            })
+              // El campo de alturas se centra en su cuerpo, y el cuerpo esta en
+              // la esquina de la celda: hay que correrlo media celda.
+              .setTranslation(lado / 2, 0, -lado / 2)
+              .setFriction(1.1),
+            cuerpo,
+          ),
+        );
+      }
+
       for (const nube of colisiones.nubes) {
         // `convexHull` devuelve null con anillos degenerados, y el dato real
         // los tiene. Sin comprobarlo, `createCollider(null, ...)` revienta la

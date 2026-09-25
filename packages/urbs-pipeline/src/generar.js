@@ -20,6 +20,7 @@ import { Capa, SinCoberturaError, codificarCelda, margenPorDefecto } from 'urbs-
 
 import { crearReproyectorDeTerritorio } from './reproyeccion.js';
 import { trocear } from './troceado.js';
+import { muestrearRelieveDeCelda, PASO_MALLA_POR_DEFECTO } from './relieve.js';
 
 /** Directorio de salida por defecto. Esta en `.gitignore`: es territorio generado. */
 export const DIRECTORIO_CELDAS_POR_DEFECTO = 'datos/celdas';
@@ -29,6 +30,9 @@ export const EXTENSION_CELDA = '.urbscell';
 
 /** Capas que este pipeline sabe trocear hoy. Relieve y suelo aun no. */
 const CAPAS_GENERADAS = Object.freeze([Capa.EDIFICIOS, Capa.VIARIO]);
+
+/** El relieve se pide aparte: devuelve una fuente, no una lista. */
+const CAPA_RELIEVE = Capa.RELIEVE;
 
 /**
  * @typedef {Object} ResumenDeCelda
@@ -92,6 +96,7 @@ export async function generarCeldas({
   directorioSalida = DIRECTORIO_CELDAS_POR_DEFECTO,
   escribir = escribirEnDisco,
   margenMetros,
+  pasoMallaMetros = PASO_MALLA_POR_DEFECTO,
 }) {
   if (territorio === null || typeof territorio !== 'object' || typeof territorio.id !== 'string') {
     throw new TypeError(
@@ -124,12 +129,37 @@ export async function generarCeldas({
     margenMetros: margen,
   });
 
+  // El relieve NO devuelve una lista de elementos como las demas capas: devuelve
+  // una fuente a la que se le piden recortes, porque una hoja del MDT son 60 MB
+  // y solo se descomprime la ventana de cada celda.
+  let fuenteRelieve = null;
+  try {
+    fuenteRelieve = await registro.obtener(CAPA_RELIEVE, area);
+  } catch (error) {
+    if (!(error instanceof SinCoberturaError)) throw error;
+  }
+
   const directorioTerritorio = join(directorioSalida, territorio.id);
   /** @type {ResumenDeCelda[]} */
   const resumenes = [];
+  let celdasConRelieve = 0;
 
   for (const contenido of celdas.values()) {
-    const bytes = codificarCelda(contenido);
+    // El contenido que devuelve `trocear` viene congelado a proposito, asi que
+    // el relieve se adjunta al codificar en vez de mutarlo.
+    let relieve = null;
+    if (fuenteRelieve !== null) {
+      relieve = await muestrearRelieveDeCelda({
+        celda: contenido.celda,
+        fuente: fuenteRelieve,
+        paso: pasoMallaMetros,
+      });
+      if (relieve !== null) {
+        celdasConRelieve += 1;
+      }
+    }
+
+    const bytes = codificarCelda(relieve === null ? contenido : { ...contenido, relieve });
     const ruta = join(directorioTerritorio, `${contenido.celda.clave}${EXTENSION_CELDA}`);
     await escribir(ruta, bytes);
 
@@ -170,6 +200,7 @@ export async function generarCeldas({
       edificios: resumenes.reduce((suma, celda) => suma + celda.edificios, 0),
       tramos: resumenes.reduce((suma, celda) => suma + celda.tramos, 0),
       bytes: resumenes.reduce((suma, celda) => suma + celda.bytes, 0),
+      celdasConRelieve,
     }),
   });
 }

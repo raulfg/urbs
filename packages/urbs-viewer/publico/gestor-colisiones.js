@@ -15,6 +15,7 @@
 import { vistasDeCelda } from 'urbs-core';
 
 import { colisionesDeCelda } from '../src/colisiones.js';
+import { alturasParaRapier } from '../src/terreno.js';
 import { desplazamientoDeCelda } from '../src/origen-flotante.js';
 import { celdasEnRadio, planDeCarga } from '../src/streaming.js';
 
@@ -46,7 +47,18 @@ export function crearGestorDeColisiones({ mundoFisico, indice, base, origen, rad
       throw new Error(`No se ha podido leer ${celda.archivo}: ${respuesta.status}`);
     }
 
-    const colisiones = colisionesDeCelda(vistasDeCelda(await respuesta.arrayBuffer()));
+    const vistas = vistasDeCelda(await respuesta.arrayBuffer());
+    const colisiones = colisionesDeCelda(vistas);
+    // El terreno del colisionador es LA MISMA malla que se dibuja: el coche
+    // pisa exactamente la superficie que se ve.
+    const terreno =
+      vistas.relieve.postes >= 2
+        ? {
+            postes: vistas.relieve.postes,
+            pasoMetros: vistas.relieve.pasoMetros,
+            alturas: alturasParaRapier(vistas.relieve),
+          }
+        : null;
 
     // Puede haber salido del radio mientras bajaba.
     if (!enVuelo.has(celda.clave)) {
@@ -59,6 +71,7 @@ export function crearGestorDeColisiones({ mundoFisico, indice, base, origen, rad
       celda.clave,
       colisiones,
       desplazamientoDeCelda(celda.origen, origen.ancla),
+      terreno,
     );
     enMundo.add(celda.clave);
   }

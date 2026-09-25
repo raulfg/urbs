@@ -20,6 +20,7 @@ import earcut from 'earcut';
 import { ALTURA_PLANTA_POR_DEFECTO, Confianza } from 'urbs-core';
 
 import { bordesDeCalzada } from './calzada.js';
+import { cotaEnCelda } from './terreno.js';
 
 /**
  * Altura de un edificio del que no se sabe nada. Ni cero —seria un poligono
@@ -46,6 +47,18 @@ export const COLOR_DESCONOCIDO = Object.freeze([0.6, 0.6, 0.6]);
 
 /** El viario no lleva color por procedencia: es el suelo, no el sujeto. */
 export const COLOR_VIARIO = Object.freeze([0.3, 0.3, 0.32]);
+
+/**
+ * Zocalo de un edificio, derivado y no elegido.
+ *
+ * Es lo que puede haber bajado el terreno ENTRE dos muestras sin que lo hayamos
+ * visto, o sea la pendiente bajo la huella repartida por el muestreo. Se acota
+ * por los dos lados: por abajo para que un edificio en llano no quede colgando
+ * de un pelo, y por arriba para que una digitalizacion absurda no lo entierre.
+ */
+export const ZOCALO_POR_DESNIVEL = 0.25;
+export const ZOCALO_MINIMO = 0.15;
+export const ZOCALO_MAXIMO = 2;
 
 /**
  * Altura util de un edificio, en metros.
@@ -170,7 +183,59 @@ function sinCierre(plano) {
  * @param {readonly number[]} color
  * @returns {void}
  */
-function extruirEdificio(malla, anillos, altura, color) {
+/**
+ * Cota a la que arranca un edificio.
+ *
+ * Se toma el MINIMO del terreno bajo la huella, menos un zocalo. No la media ni
+ * una muestra en el centroide, y el motivo es que los tres errores posibles no
+ * cuestan lo mismo: un hueco bajo un edificio es el unico que se VE y por el
+ * que ademas se CAE, mientras que enterrar treinta centimetros de un portal
+ * solo queda un poco raro. La media entierra media fachada y hace flotar la
+ * otra media —lo peor de las dos— y una muestra en el centroide flota por el
+ * lado de abajo en cualquier calle en cuesta, que en Ciudad Vieja son casi
+ * todas.
+ *
+ * El minimo se busca sobre la MALLA QUE SE ENVIA, que es la superficie que se
+ * ve y se pisa. Buscarlo sobre el dato fino del preprocesado dejaria el
+ * edificio flotando alli donde la malla quede por debajo.
+ *
+ * El zocalo NO es un numero elegido: es lo que puede bajar el terreno entre dos
+ * muestras, o sea pendiente por paso de muestreo, acotado para que una
+ * digitalizacion absurda no entierre un edificio entero.
+ *
+ * Coste que se acepta: un edificio largo en una calle empinada se hunde por el
+ * extremo de arriba. Tiene fecha de caducidad — OSM ya trae `building:part`, y
+ * cuando cada parte tome su propia base el defecto se disuelve casi solo.
+ *
+ * @param {Float32Array} anilloExterior  Pares [este, norte] locales
+ * @param {Object|null} relieve
+ * @returns {number}
+ */
+export function baseDeEdificio(anilloExterior, relieve) {
+  if (relieve === null) {
+    return 0;
+  }
+
+  let minima = Infinity;
+  let maxima = -Infinity;
+  for (let i = 0; i < anilloExterior.length; i += 2) {
+    const cota = cotaEnCelda(relieve, anilloExterior[i], anilloExterior[i + 1]);
+    if (cota === null) continue;
+    if (cota < minima) minima = cota;
+    if (cota > maxima) maxima = cota;
+  }
+  if (minima === Infinity) {
+    return 0;
+  }
+
+  // Pendiente bajo la huella por el paso de la rejilla: lo que el terreno puede
+  // haber bajado entre dos muestras sin que lo hayamos visto.
+  const desnivel = maxima - minima;
+  const zocalo = Math.min(Math.max(desnivel * ZOCALO_POR_DESNIVEL, ZOCALO_MINIMO), ZOCALO_MAXIMO);
+  return minima - zocalo;
+}
+
+function extruirEdificio(malla, anillos, altura, color, base = 0) {
   // --- Tejado. earcut quiere las coordenadas planas seguidas y los huecos
   // marcados por el indice de vertice en el que empiezan.
   const llano = [];
@@ -188,7 +253,7 @@ function extruirEdificio(malla, anillos, altura, color) {
   // array plano: la malla ya trae los edificios anteriores.
   const baseTejado = malla.posiciones.length / 3;
   for (let i = 0; i < llano.length; i += 2) {
-    malla.vertice(llano[i], altura, -llano[i + 1], ARRIBA, color);
+    malla.vertice(llano[i], base + altura, -llano[i + 1], ARRIBA, color);
   }
 
   const triangulos = earcut(llano, inicioHueco, 2);
@@ -224,10 +289,10 @@ function extruirEdificio(malla, anillos, altura, color) {
       // Normal exterior de un anillo antihorario, pasada a los ejes de escena.
       const normal = [dn / largo, 0, de / largo];
 
-      const abajo1 = malla.vertice(e1, 0, -n1, normal, color);
-      const abajo2 = malla.vertice(e2, 0, -n2, normal, color);
-      const arriba2 = malla.vertice(e2, altura, -n2, normal, color);
-      const arriba1 = malla.vertice(e1, altura, -n1, normal, color);
+      const abajo1 = malla.vertice(e1, base, -n1, normal, color);
+      const abajo2 = malla.vertice(e2, base, -n2, normal, color);
+      const arriba2 = malla.vertice(e2, base + altura, -n2, normal, color);
+      const arriba1 = malla.vertice(e1, base + altura, -n1, normal, color);
 
       malla.triangulo(abajo1, abajo2, arriba2);
       malla.triangulo(abajo1, arriba2, arriba1);
@@ -247,7 +312,7 @@ function extruirEdificio(malla, anillos, altura, color) {
  * @param {number} anchura
  * @returns {void}
  */
-function tenderCalzada(malla, eje, anchura) {
+function tenderCalzada(malla, eje, anchura, relieve = null) {
   // El dato real puede traer una anchura invalida en un tramo suelto. Perder
   // ese tramo es mejor que perder la celda entera, que es lo que pasaria si se
   // dejara subir el RangeError.
@@ -261,16 +326,23 @@ function tenderCalzada(malla, eje, anchura) {
     return;
   }
 
+  // La calzada se apoya en la MALLA QUE SE ENVIA, vertice a vertice y tambien
+  // en los desplazados por el inglete. Tomar la cota del dato fino del
+  // preprocesado dejaria la calle flotando o hundida respecto a lo que se ve,
+  // con luz por debajo a lo largo de toda la calle — y un edificio disimula ese
+  // desfase tras sus paredes, pero una calle no puede.
+  const cotaDeBorde = (x, z) => (relieve === null ? 0 : cotaEnCelda(relieve, x, z) ?? 0) + ALTURA_VIARIO;
+
   let derechaAnterior = malla.vertice(
     derecha[0],
-    ALTURA_VIARIO,
+    cotaDeBorde(derecha[0], derecha[1]),
     -derecha[1],
     ARRIBA,
     COLOR_VIARIO,
   );
   let izquierdaAnterior = malla.vertice(
     izquierda[0],
-    ALTURA_VIARIO,
+    cotaDeBorde(izquierda[0], izquierda[1]),
     -izquierda[1],
     ARRIBA,
     COLOR_VIARIO,
@@ -279,14 +351,14 @@ function tenderCalzada(malla, eje, anchura) {
   for (let i = 1; i < vertices; i += 1) {
     const d = malla.vertice(
       derecha[i * 2],
-      ALTURA_VIARIO,
+      cotaDeBorde(derecha[i * 2], derecha[i * 2 + 1]),
       -derecha[i * 2 + 1],
       ARRIBA,
       COLOR_VIARIO,
     );
     const z = malla.vertice(
       izquierda[i * 2],
-      ALTURA_VIARIO,
+      cotaDeBorde(izquierda[i * 2], izquierda[i * 2 + 1]),
       -izquierda[i * 2 + 1],
       ARRIBA,
       COLOR_VIARIO,
@@ -312,6 +384,18 @@ export function construirGeometriaDeCelda(vistas) {
   const malla = crearMalla();
   const { cabecera, edificios, tramos, diccionarios } = vistas;
 
+  // El suelo sobre el que se apoya todo. Es la malla que se ENVIA, no el dato
+  // fino del que salio: es la que se ve y la que pisa el coche.
+  const relieve =
+    vistas.relieve !== undefined && vistas.relieve.postes >= 2
+      ? {
+          cotas: vistas.relieve.cotas,
+          cotaBase: vistas.relieve.cotaBase,
+          postes: vistas.relieve.postes,
+          pasoMetros: vistas.relieve.pasoMetros,
+        }
+      : null;
+
   for (let i = 0; i < cabecera.numeroEdificios; i += 1) {
     const anillos = [];
     for (let a = edificios.inicioAnillo[i]; a < edificios.inicioAnillo[i + 1]; a += 1) {
@@ -327,18 +411,20 @@ export function construirGeometriaDeCelda(vistas) {
     }
 
     const confianza = diccionarios.procedencias[edificios.procedencia[i]]?.confianza;
+    const base = baseDeEdificio(anillos[0], relieve);
     extruirEdificio(
       malla,
       anillos,
       alturaDeEdificio(edificios.altura[i], edificios.plantas[i]),
       COLOR_POR_CONFIANZA[confianza] ?? COLOR_DESCONOCIDO,
+      base,
     );
   }
 
   for (let i = 0; i < cabecera.numeroTramos; i += 1) {
     const desde = tramos.inicioVertice[i] * 2;
     const hasta = tramos.inicioVertice[i + 1] * 2;
-    tenderCalzada(malla, tramos.vertices.subarray(desde, hasta), tramos.anchura[i]);
+    tenderCalzada(malla, tramos.vertices.subarray(desde, hasta), tramos.anchura[i], relieve);
   }
 
   return {

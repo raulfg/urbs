@@ -26,6 +26,7 @@ const CLAVES_ADMITIDAS = Object.freeze([
   'epsg',
   'ladoCeldaMetros',
   'notas',
+  'relieve',
 ]);
 
 /** Las cuatro esquinas que define un area, en grados. */
@@ -116,6 +117,51 @@ export function territorioDesdeDefinicion(definicion) {
  * @param {string} ruta
  * @returns {Promise<import('urbs-core').Territorio>}
  */
+/**
+ * Las hojas de relieve que declara un territorio, si declara alguna.
+ *
+ * Va aparte del dominio a proposito: `Territorio` describe QUE area se genera,
+ * no DE DONDE sale cada capa. Poner identificadores del Centro de Descargas del
+ * CNIG dentro del dominio ataria el motor a Espana.
+ *
+ * @param {object} definicion
+ * @returns {{hojas: Array<{id: number|string, nombre: string}>, pasoMallaMetros?: number}|null}
+ */
+export function relieveDeDefinicion(definicion) {
+  const relieve = definicion?.relieve;
+  if (relieve === undefined || relieve === null) {
+    return null;
+  }
+  if (!Array.isArray(relieve.hojas) || relieve.hojas.length === 0) {
+    throw new TypeError(
+      'territorios: `relieve` tiene que traer al menos una hoja en `hojas`, cada una con {id, nombre}',
+    );
+  }
+  for (const hoja of relieve.hojas) {
+    if (hoja?.id === undefined || typeof hoja?.nombre !== 'string') {
+      throw new TypeError(
+        `territorios: cada hoja de relieve necesita {id, nombre}; llego ${JSON.stringify(hoja)}`,
+      );
+    }
+  }
+  return relieve;
+}
+
+/**
+ * Lee la definicion cruda de un territorio, sin pasarla por el dominio.
+ *
+ * @param {string} ruta
+ * @returns {Promise<object>}
+ */
+export async function leerDefinicion(ruta) {
+  const texto = await readFile(ruta, 'utf8');
+  try {
+    return JSON.parse(texto);
+  } catch (causa) {
+    throw new SyntaxError(`leerDefinicion: "${ruta}" no es JSON valido: ${causa.message}`);
+  }
+}
+
 export async function cargarDefinicion(ruta) {
   const texto = await readFile(ruta, 'utf8');
 

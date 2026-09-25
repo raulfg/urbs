@@ -8,5 +8,10 @@
     "latMax": 43.393
   },
   "ladoCeldaMetros": 250,
+  "relieve": {
+    "hojas": [
+      { "id": 10323766, "nombre": "MDT02-ETRS89-HU29-0021-3-COB2" }
+    ]
+  },
   "notas": "La peninsula entera de A Coruna: la Torre de Hercules en el extremo norte, el Orzan, Riazor, la Ciudad Vieja, la Marina y el ensanche hasta la entrada por Los Castros. Unos 3,4 x 4,2 km. Se anade porque el slice del casco historico no incluia ningun hito reconocible y resultaba dificil orientarse; este si. Mismo pipeline y mismo lado de celda: solo cambian las cuatro esquinas."
 }

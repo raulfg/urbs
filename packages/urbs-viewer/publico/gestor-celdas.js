@@ -18,6 +18,7 @@ import * as THREE from 'three';
 import { vistasDeCelda } from 'urbs-core';
 
 import { construirGeometriaDeCelda } from '../src/geometria.js';
+import { construirTerrenoDeCelda } from '../src/terreno.js';
 import { desplazamientoDeCelda } from '../src/origen-flotante.js';
 import { celdasEnRadio, planDeCarga } from '../src/streaming.js';
 
@@ -75,6 +76,11 @@ export function crearGestorDeCeldas({ escena, indice, base, origen, radioMetros 
     geometria.setIndex(new THREE.BufferAttribute(malla.indices, 1));
     geometria.computeBoundingSphere();
 
+    // El terreno va en su propia malla y no mezclado con edificios y calzada:
+    // es la unica superficie que puede existir sin que haya nada encima, y
+    // separarla deja la puerta abierta a darle su propio material.
+    const terreno = construirTerrenoDeCelda(vistas);
+
     const objeto = new THREE.Mesh(geometria, material);
     referenciasAlMaterial += 1;
     objeto.name = celda.clave;
@@ -85,6 +91,18 @@ export function crearGestorDeCeldas({ escena, indice, base, origen, radioMetros 
     // la matriz son cientos de metros.
     const { x, z } = desplazamientoDeCelda(celda.origen, origen.ancla);
     objeto.position.set(x, 0, z);
+
+    if (terreno !== null) {
+      const geometriaTerreno = new THREE.BufferGeometry();
+      geometriaTerreno.setAttribute('position', new THREE.BufferAttribute(terreno.posiciones, 3));
+      geometriaTerreno.setAttribute('normal', new THREE.BufferAttribute(terreno.normales, 3));
+      geometriaTerreno.setAttribute('color', new THREE.BufferAttribute(terreno.colores, 3));
+      geometriaTerreno.setIndex(new THREE.BufferAttribute(terreno.indices, 1));
+      geometriaTerreno.computeBoundingSphere();
+      const mallaTerreno = new THREE.Mesh(geometriaTerreno, material);
+      referenciasAlMaterial += 1;
+      objeto.add(mallaTerreno);
+    }
 
     escena.add(objeto);
     enEscena.set(celda.clave, objeto);
@@ -104,6 +122,10 @@ export function crearGestorDeCeldas({ escena, indice, base, origen, radioMetros 
     escena.remove(objeto);
     // ANTES de soltar la referencia. Al reves, la memoria de la GPU se queda.
     objeto.geometry.dispose();
+    for (const hijo of objeto.children) {
+      hijo.geometry.dispose();
+      referenciasAlMaterial -= 1;
+    }
     edificiosVisibles -= objeto.userData.edificios;
     enEscena.delete(clave);
     referenciasAlMaterial -= 1;

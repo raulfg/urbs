@@ -65,3 +65,11 @@ export { MARGEN_VENTANA, noroesteDeVentana, ventanaDeCaja } from './src/pnoa/ven
 export { abrirHoja } from './src/pnoa/hoja.js';
 
 export { estructuraDeVia, nivelDeVia } from './src/osm/etiquetas.js';
+
+export {
+  ATRIBUCION_MDT02,
+  ID_PROVEEDOR_RELIEVE,
+  contiene,
+  crearFuenteRelievePnoa,
+  crearProveedorRelievePnoa,
+} from './src/pnoa/proveedor.js';

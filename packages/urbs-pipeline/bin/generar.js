@@ -19,11 +19,15 @@ import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import { crearRegistro } from 'urbs-core';
-import { crearProveedoresOsm, DIRECTORIO_CRUDOS_POR_DEFECTO } from 'urbs-providers';
+import {
+  crearProveedoresOsm,
+  crearProveedorRelievePnoa,
+  DIRECTORIO_CRUDOS_POR_DEFECTO,
+} from 'urbs-providers';
 
 import { DIRECTORIO_CELDAS_POR_DEFECTO, generarCeldas } from '../src/generar.js';
 import { NOMBRE_INDICE, construirIndice } from '../src/indice.js';
-import { cargarDefinicion } from '../src/territorios.js';
+import { cargarDefinicion, leerDefinicion, relieveDeDefinicion } from '../src/territorios.js';
 
 const USO = `
 Uso: npm run generar -- <territorio.json> [opciones]
@@ -130,6 +134,21 @@ async function principal(argv) {
   const registro = crearRegistro();
   registro.registrar(proveedores.edificios);
   registro.registrar(proveedores.viario);
+
+  // El relieve solo se registra si el territorio declara sus hojas. Un
+  // territorio sin ellas se genera plano y lo dice en el informe, igual que
+  // hasta ahora: es una degradacion, no un fallo.
+  const relieve = relieveDeDefinicion(await leerDefinicion(rutaTerritorio));
+  if (relieve !== null) {
+    registro.registrar(
+      crearProveedorRelievePnoa({
+        hojas: relieve.hojas,
+        directorio: opciones.crudos,
+        fetcher: globalThis.fetch,
+        refrescar: opciones.refrescar,
+      }),
+    );
+  }
 
   console.log(`Generando "${territorio.id}" desde ${rutaTerritorio}...`);
   const comenzado = Date.now();
