@@ -171,20 +171,43 @@ test('una ladera inclina la normal hacia la bajada', () => {
 
 // --- Campo de alturas para Rapier
 
-test('el orden de las alturas de Rapier COINCIDE con el de la malla, no se transpone', () => {
-  // El punto (i, j) de un heightfield es `alturas[i + j * (filas+1)]`, con `i`
-  // en el eje X (el este) y `j` en el Z. Aqui el indice es
-  // `fila * postes + columna`, con la fila recorriendo el norte, o sea la Z.
-  // Los dos coinciden. Se prueba porque es justo el tipo de coincidencia que
-  // alguien "arregla" transponiendo, y entonces se conduce sobre un terreno
-  // girado que la pantalla no delata.
+test('las alturas de Rapier van TRANSPUESTAS respecto a la malla', () => {
+  // Esto esta MEDIDO contra el mundo de Rapier, no razonado. La version
+  // anterior de esta prueba afirmaba lo contrario —que los dos ordenes
+  // coincidian— con un comentario muy convencido, y el coche conducia sobre un
+  // terreno reflejado respecto al que se dibujaba. La pantalla no lo delataba
+  // porque un relieve transpuesto sigue pareciendo un relieve; se vio lanzando
+  // rayos y comparando esquinas:
+  //
+  //   local (20,20)   dibujado 37,9  fisico 51,6
+  //   local (230,230) dibujado 51,6  fisico 37,9   <- intercambiados
+  //
+  // En la malla el indice es `fila * postes + columna`; en el campo de alturas
+  // el primer indice recorre la Z.
   const { relieve } = relieveDe([0, 10, 20, 30], 10);
   const alturas = alturasParaRapier(relieve);
 
+  // Malla: fila0 = [0, 10], fila1 = [20, 30].
+  // Transpuesta: [0, 20, 10, 30].
   assert.ok(Math.abs(alturas[0] - 0) < 0.06);
-  assert.ok(Math.abs(alturas[1] - 10) < 0.06, 'i=1,j=0 es el poste de mas al este de la fila norte');
-  assert.ok(Math.abs(alturas[2] - 20) < 0.06);
+  assert.ok(Math.abs(alturas[1] - 20) < 0.06, 'el segundo es el de la fila de ABAJO, no el de al lado');
+  assert.ok(Math.abs(alturas[2] - 10) < 0.06);
   assert.ok(Math.abs(alturas[3] - 30) < 0.06);
+});
+
+test('transponer dos veces devuelve la malla original', () => {
+  // Guarda barata contra volver a equivocarse de sentido.
+  const { relieve } = relieveDe([1, 2, 3, 4, 5, 6, 7, 8, 9], 10);
+  const una = alturasParaRapier(relieve);
+  const postes = relieve.postes;
+  const dos = new Float32Array(una.length);
+  for (let f = 0; f < postes; f += 1) {
+    for (let c = 0; c < postes; c += 1) dos[c * postes + f] = una[f * postes + c];
+  }
+
+  for (let i = 0; i < dos.length; i += 1) {
+    assert.ok(Math.abs(dos[i] - (relieve.cotaBase + relieve.cotas[i] / 10)) < 0.06, `poste ${i}`);
+  }
 });
 
 test('un hueco sin dato entra en el campo de alturas como una cota, no como NaN', () => {
@@ -248,4 +271,27 @@ test('la rampa reparte por DISTANCIA, no por numero de vertices', () => {
 test('un eje vacio no revienta', () => {
   const { relieve } = relieveDe([0, 0, 0, 0], 10);
   assert.equal(cotasDePuente(new Float32Array(0), relieve).length, 0);
+});
+
+// --- Tierra y agua tienen que distinguirse por COLOR, no por brillo
+
+test('la tierra es calida y el agua fria: no se distinguen solo por el brillo', () => {
+  // La luz de ambiente tiene el cielo muy azul, asi que una tierra gris neutra
+  // sale AZUL al multiplicarla. Con agua tambien azul, lo unico que quedaba
+  // para distinguirlas era el brillo — y a ras de calle, con niebla, eso no
+  // basta: el suelo parecia agua y se conducia sin saber por donde.
+  const calidez = (c) => c[0] - c[2];
+
+  assert.ok(calidez(COLOR_TIERRA) > 0.1, 'la tierra tiene que tirar a calida');
+  assert.ok(calidez(COLOR_AGUA) < -0.2, 'el agua tiene que tirar a fria');
+});
+
+test('la diferencia entre tierra y agua no es solo de brillo', () => {
+  const brillo = (c) => (c[0] + c[1] + c[2]) / 3;
+  const distanciaDeTono = Math.hypot(
+    COLOR_TIERRA[0] - COLOR_AGUA[0] - (brillo(COLOR_TIERRA) - brillo(COLOR_AGUA)),
+    COLOR_TIERRA[2] - COLOR_AGUA[2] - (brillo(COLOR_TIERRA) - brillo(COLOR_AGUA)),
+  );
+
+  assert.ok(distanciaDeTono > 0.2, 'quitando el brillo todavia tienen que diferenciarse');
 });

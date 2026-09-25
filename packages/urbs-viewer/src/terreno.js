@@ -29,11 +29,24 @@ function esAgua(relieve, indice) {
   return relieve.agua !== undefined && (relieve.agua[indice >> 3] & (1 << (indice & 7))) !== 0;
 }
 
-/** Color de la tierra. Gris neutro: el protagonista es la ciudad. */
-export const COLOR_TIERRA = Object.freeze([0.43, 0.44, 0.46]);
+/**
+ * Tierra y agua NO pueden distinguirse solo por el brillo.
+ *
+ * La luz de ambiente es un hemisferio con el cielo en 0xbfd4ff, o sea muy azul.
+ * Con una tierra gris neutra, la cuenta sale asi:
+ *
+ *   tierra (0,43 0,44 0,46) x luz -> (0,68 0,77 0,97)  AZUL
+ *   agua   (0,16 0,26 0,36) x luz -> (0,25 0,45 0,76)  azul
+ *
+ * Las dos salen azules y solo cambia el brillo. Desde el aire se distinguen por
+ * contraste, pero a ras de calle y con niebla el suelo parece agua y se conduce
+ * sin saber si vas por tierra. Por eso la tierra es CALIDA: al multiplicarla por
+ * una luz azul vuelve a gris neutro, que es lo que parece suelo.
+ */
+export const COLOR_TIERRA = Object.freeze([0.47, 0.42, 0.32]);
 
-/** Color del agua. */
-export const COLOR_AGUA = Object.freeze([0.16, 0.26, 0.36]);
+/** Y el agua, mas saturada, para que no dependa del brillo. */
+export const COLOR_AGUA = Object.freeze([0.09, 0.21, 0.38]);
 
 /** Centinela de poste sin dato dentro de la malla enviada. */
 export const SIN_DATO_RELIEVE = -32768;
@@ -196,16 +209,27 @@ export function construirTerrenoDeCelda(vistas, { umbralAgua = 0 } = {}) {
 /**
  * Alturas de la celda en el orden que quiere el campo de alturas de Rapier.
  *
- * El punto (i, j) de un `heightfield` de Rapier es `alturas[i + j * (filas+1)]`,
- * donde `i` recorre el eje X —el este— y `j` el eje Z. En la malla de aqui el
- * indice es `fila * postes + columna`, con la fila recorriendo el norte de
- * arriba abajo, o sea la Z: los dos indices coinciden, y por eso esto es una
- * copia y no una transposicion.
+ * SE TRANSPONE, y esto esta MEDIDO, no razonado. La primera version copiaba el
+ * array tal cual con un comentario muy convencido explicando por que los dos
+ * ordenes coincidian. No coinciden: el coche conducia sobre un terreno reflejado
+ * respecto al que se dibujaba, y la pantalla no lo delataba porque un relieve
+ * transpuesto sigue pareciendo un relieve.
  *
- * Se escribe igualmente como funcion con nombre y con prueba, porque es
- * exactamente la clase de coincidencia que alguien "arregla" mas adelante
- * transponiendo, y el sintoma seria un terreno girado sobre el que se conduce
- * sin que la pantalla lo delate.
+ * Se vio lanzando rayos de Rapier contra el mundo y comparando con
+ * `cotaEnCelda` en las cuatro esquinas de una celda real:
+ *
+ *     local (20,20)    dibujado 37,9   fisico 51,6
+ *     local (230,230)  dibujado 51,6   fisico 37,9   <- intercambiados
+ *     local (20,230)   dibujado 64,3   fisico 64,3   <- coinciden
+ *     local (230,20)   dibujado 49,1   fisico 49,1   <- coinciden
+ *
+ * Los dos puntos que intercambian valor son los que son reflejo uno del otro al
+ * transponer; los que caen sobre la diagonal encajan solos. Eso es una
+ * transposicion y no otra cosa.
+ *
+ * En la malla de aqui el indice es `fila * postes + columna`, con la fila
+ * recorriendo el norte. En el campo de alturas de Rapier el primer indice
+ * recorre la Z, asi que hay que darle la vuelta.
  *
  * @param {{cotas: Int16Array, cotaBase: number, postes: number}} relieve
  * @param {number} [nivelSinDato]  Que cota poner donde no hay dato
@@ -214,9 +238,11 @@ export function construirTerrenoDeCelda(vistas, { umbralAgua = 0 } = {}) {
 export function alturasParaRapier(relieve, nivelSinDato = 0) {
   const { postes } = relieve;
   const alturas = new Float32Array(postes * postes);
-  for (let i = 0; i < alturas.length; i += 1) {
-    const cota = cotaDePoste(relieve, i);
-    alturas[i] = cota === null ? nivelSinDato : cota;
+  for (let fila = 0; fila < postes; fila += 1) {
+    for (let columna = 0; columna < postes; columna += 1) {
+      const cota = cotaDePoste(relieve, fila * postes + columna);
+      alturas[columna * postes + fila] = cota === null ? nivelSinDato : cota;
+    }
   }
   return alturas;
 }
