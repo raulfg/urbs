@@ -27,5 +27,19 @@ export {
   epsgRecomendado,
 } from './src/dominio/proyeccion.js';
 export { crearTerritorio, LADO_CELDA_POR_DEFECTO } from './src/dominio/territorio.js';
+export {
+  BITS_MANTISA_FLOAT32,
+  PRECISION_FLOAT32_POR_DEFECTO,
+  indiceDeCelda,
+  origenDeCelda,
+  claveDeCelda,
+  crearCelda,
+  celdaDePunto,
+  aLocal,
+  aProyectado,
+  pasoFloat32,
+  esSeguroEnFloat32,
+  exigirCoordenadasLocales,
+} from './src/dominio/celda.js';
 export { Capa, validarProveedor, metodoDeCapa } from './src/proveedores/contratos.js';
 export { crearRegistro, SinCoberturaError } from './src/proveedores/registro.js';
