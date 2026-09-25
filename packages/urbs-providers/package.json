@@ -1,0 +1,16 @@
+{
+  "name": "urbs-providers",
+  "version": "0.0.0",
+  "description": "Implementaciones de fuentes de datos para URBS: OSM (global), Catastro y PNOA (Espana).",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "dependencies": {
+    "urbs-core": "0.0.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

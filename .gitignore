@@ -1,0 +1,17 @@
+node_modules/
+*.log
+.DS_Store
+.env
+.env.*
+
+# Datos crudos descargados de las fuentes (pesados, no se versionan)
+datos/crudos/
+datos/cache/
+*.pbf
+*.gml
+*.tif
+*.tiff
+
+# Salida del preprocesado
+datos/celdas/
+dist/

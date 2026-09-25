@@ -1,0 +1,17 @@
+{
+  "name": "urbs-pipeline",
+  "version": "0.0.0",
+  "description": "Preprocesado offline de URBS: reproyeccion, troceado en celdas y exportacion.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "dependencies": {
+    "urbs-core": "0.0.0",
+    "urbs-providers": "0.0.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

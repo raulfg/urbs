@@ -1,0 +1,17 @@
+{
+  "name": "urbs-core",
+  "version": "0.0.0",
+  "description": "Dominio y contratos de URBS. Sin dependencias, sin IO, sin render.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "src/"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}
