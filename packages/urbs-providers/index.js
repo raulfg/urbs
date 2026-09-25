@@ -51,4 +51,3 @@ export {
   PLANTAS_MAXIMAS,
 } from './src/osm/etiquetas.js';
 
-export { leerGeoTiff } from './src/pnoa/geotiff.js';

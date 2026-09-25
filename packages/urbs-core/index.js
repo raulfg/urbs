@@ -41,7 +41,8 @@ export {
   esSeguroEnFloat32,
   exigirCoordenadasLocales,
 } from './src/dominio/celda.js';
-export { NIVEL_DEL_MAR, crearMallaElevacion, esMar } from './src/dominio/elevacion.js';
+export { SIN_DATO, crearMallaElevacion, hayDato } from './src/dominio/elevacion.js';
+export { UMBRAL_AGUA_POR_DEFECTO, mascaraDeAguaPorUmbral } from './src/dominio/agua.js';
 export {
   MAGIA_URBSCELL,
   VERSION_FORMATO,

@@ -1,47 +1,51 @@
 /**
  * Malla de elevacion: el relieve, antes de trocearlo en celdas.
  *
- * Es una rejilla regular de cotas en metros con su rectangulo geografico, y
- * sabe hacer una sola cosa: decir a que altura esta un punto. Vive en el
- * dominio y sin dependencias porque la llena un proveedor en Node y la consulta
- * el pipeline, igual que pasa con el formato de celda.
+ * Es una rejilla regular de cotas en metros con su rectangulo, y sabe hacer una
+ * sola cosa: decir a que altura esta un punto. Vive en el dominio y sin
+ * dependencias porque la llena un proveedor en Node y la consulta el pipeline,
+ * igual que pasa con el formato de celda.
  *
- * Dos decisiones que parecen detalles y no lo son:
+ * Los ejes son ESTE y NORTE en metros proyectados, no grados. El MDT02 del
+ * PNOA-LiDAR se publica por hojas en UTM —la de A Coruna en ETRS89 / UTM 29N,
+ * que es justo el sistema en el que ya trabaja el territorio—, asi que no hay
+ * ninguna reproyeccion que hacer: entra en los mismos metros en los que se
+ * trocea la ciudad.
  *
- * 1. FUERA DE LA MALLA SE DEVUELVE `null`, NUNCA CERO. En este dato el cero
- *    significa "nivel del mar", asi que devolverlo cuando lo que pasa es que no
- *    hay dato inunda de oceano todo lo que caiga fuera del recorte. "No lo se"
- *    y "hay agua" son cosas distintas y aqui no se mezclan jamas.
- * 2. SE INTERPOLA. El MDT del PNOA servido por WCS viene en METROS ENTEROS:
- *    un escalon de 1 m sobre una rejilla de 5 m son once grados de pendiente
- *    falsa, y eso se ve aterrazado y se conduce peor. La bilineal no inventa
- *    relieve, reparte el que ya hay.
+ * Tres decisiones que parecen detalles y no lo son:
+ *
+ * 1. FUERA DE LA MALLA SE DEVUELVE `null`, NUNCA UNA COTA. "No lo se" y "esta a
+ *    esta altura" son cosas distintas, y la de arriba se propaga.
+ * 2. EL CENTINELA NO SE INTERPOLA. Ver `SIN_DATO`.
+ * 3. SE INTERPOLA LO DEMAS. Sin bilineal, un escalon de la rejilla se convierte
+ *    en un peldano de verdad: se ve aterrazado y se conduce peor. Interpolar no
+ *    inventa relieve, reparte el que ya hay.
  *
  * La fila 0 es la del NORTE, como en un GeoTIFF: se recorre de arriba abajo.
  */
 
 /**
- * Cota del mar, en metros.
+ * Centinela de "no producido" del MDT del PNOA.
  *
- * No es un convenio nuestro: el MDT del PNOA da alturas ortometricas sobre el
- * nivel medio del mar, asi que el agua sale como cero exacto. Comprobado sobre
- * tres recortes reales de A Coruna — en el recorte interior no hay ni un pixel
- * a cero, asi que el cero no es un relleno de "sin dato", es el mar.
+ * NO significa agua. Significa que el vuelo no cubrio ese pixel o que el dato
+ * se descarto. Es la trampa mas cara de todo este dato: al ser el numero mas
+ * bajo de la escala, cualquier filtro ingenuo de "esto esta bajo, sera mar"
+ * convierte todos los huecos del vuelo en oceano. Y al interpolar, un solo
+ * vecino con este valor abre un pozo de treinta y dos kilometros.
  */
-export const NIVEL_DEL_MAR = 0;
+export const SIN_DATO = -32767;
 
 /**
- * Si una cota es agua.
+ * Si una cota es un valor util.
  *
- * Una cota DESCONOCIDA no es mar. Es la diferencia entre "aqui hay agua" y
- * "aqui no tengo dato", y confundirlas es como se inunda una ciudad entera por
- * haber pedido mal un recorte.
+ * "No lo se" y "aqui hay agua" son cosas distintas y aqui no se mezclan jamas.
+ * Quien decida que es agua es `mascaraDeAguaPorUmbral`, no esto.
  *
  * @param {number|null|undefined} cota
  * @returns {boolean}
  */
-export function esMar(cota) {
-  return typeof cota === 'number' && Number.isFinite(cota) && cota <= NIVEL_DEL_MAR;
+export function hayDato(cota) {
+  return typeof cota === 'number' && Number.isFinite(cota) && cota !== SIN_DATO;
 }
 
 /**
@@ -49,8 +53,8 @@ export function esMar(cota) {
  * @property {ArrayLike<number>} cotas  Metros, fila a fila y de norte a sur
  * @property {number} ancho            Columnas
  * @property {number} alto             Filas
- * @property {{lon: number, lat: number}} noroeste  Centro del pixel (0, 0)
- * @property {{lon: number, lat: number}} paso      Grados por pixel, positivos
+ * @property {{este: number, norte: number}} noroeste  Centro del pixel (0, 0)
+ * @property {{este: number, norte: number}} paso      Metros por pixel, positivos
  */
 
 /**
@@ -67,29 +71,36 @@ export function crearMallaElevacion({ cotas, ancho, alto, noroeste, paso }) {
       `crearMallaElevacion: hacen falta ${ancho * alto} \`cotas\` y hay ${cotas?.length ?? 0}`,
     );
   }
-  if (!(paso?.lon > 0) || !(paso?.lat > 0)) {
+  if (!(paso?.este > 0) || !(paso?.norte > 0)) {
     throw new RangeError(
-      'crearMallaElevacion: el `paso` en grados debe ser positivo en los dos ejes; el sentido lo fija `noroeste`',
+      'crearMallaElevacion: el `paso` en metros debe ser positivo en los dos ejes; el sentido lo fija `noroeste`',
     );
   }
-  if (!Number.isFinite(noroeste?.lon) || !Number.isFinite(noroeste?.lat)) {
-    throw new TypeError('crearMallaElevacion: `noroeste` debe ser un punto {lon, lat}');
+  if (!Number.isFinite(noroeste?.este) || !Number.isFinite(noroeste?.norte)) {
+    throw new TypeError('crearMallaElevacion: `noroeste` debe ser un punto {este, norte}');
   }
 
-  const lonMin = noroeste.lon;
-  const lonMax = noroeste.lon + (ancho - 1) * paso.lon;
-  const latMax = noroeste.lat;
-  const latMin = noroeste.lat - (alto - 1) * paso.lat;
+  const esteMin = noroeste.este;
+  const esteMax = noroeste.este + (ancho - 1) * paso.este;
+  const norteMax = noroeste.norte;
+  const norteMin = noroeste.norte - (alto - 1) * paso.norte;
 
+  // El centinela no cuenta para el rango: si contara, cualquier recorte con un
+  // hueco de vuelo diria que su cota minima son -32.767 m.
   let minima = Infinity;
   let maxima = -Infinity;
   for (let i = 0; i < ancho * alto; i += 1) {
     const cota = cotas[i];
+    if (cota === SIN_DATO) continue;
     if (cota < minima) minima = cota;
     if (cota > maxima) maxima = cota;
   }
+  if (minima === Infinity) {
+    minima = null;
+    maxima = null;
+  }
 
-  const limites = Object.freeze({ lonMin, latMin, lonMax, latMax });
+  const limites = Object.freeze({ esteMin, norteMin, esteMax, norteMax });
 
   /**
    * @param {number} columna
@@ -109,23 +120,35 @@ export function crearMallaElevacion({ cotas, ancho, alto, noroeste, paso }) {
     cotaMaxima: maxima,
 
     /**
+     * Cota cruda de un pixel por su indice, sin interpolar y sin filtrar.
+     *
+     * La usa la mascara de agua, que necesita ver el centinela para NO tragarselo.
+     *
+     * @param {number} indice
+     * @returns {number}
+     */
+    cotaEnRejilla(indice) {
+      return cotas[indice];
+    },
+
+    /**
      * Cota de un punto, en metros, o `null` si cae fuera.
      *
-     * @param {number} lon
-     * @param {number} lat
+     * @param {number} este
+     * @param {number} norte
      * @returns {number|null}
      */
-    cota(lon, lat) {
-      if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+    cota(este, norte) {
+      if (!Number.isFinite(este) || !Number.isFinite(norte)) {
         return null;
       }
-      if (lon < lonMin || lon > lonMax || lat < latMin || lat > latMax) {
+      if (este < esteMin || este > esteMax || norte < norteMin || norte > norteMax) {
         return null;
       }
 
-      // Posicion en unidades de pixel. La latitud va al reves que la fila.
-      const x = (lon - lonMin) / paso.lon;
-      const y = (latMax - lat) / paso.lat;
+      // Posicion en unidades de pixel. El norte va al reves que la fila.
+      const x = (este - esteMin) / paso.este;
+      const y = (norteMax - norte) / paso.norte;
 
       const columna = Math.min(Math.floor(x), ancho - 1);
       const fila = Math.min(Math.floor(y), alto - 1);
@@ -139,6 +162,18 @@ export function crearMallaElevacion({ cotas, ancho, alto, noroeste, paso }) {
       const arribaDerecha = enRejilla(columnaSiguiente, fila);
       const abajoIzquierda = enRejilla(columna, filaSiguiente);
       const abajoDerecha = enRejilla(columnaSiguiente, filaSiguiente);
+
+      // Si alguna de las cuatro esquinas es el centinela, NO se interpola: se
+      // devuelve "no lo se". Mezclar -32.767 en una media abre un pozo de
+      // treinta kilometros que ademas se reparte por los pixeles de al lado.
+      if (
+        arribaIzquierda === SIN_DATO ||
+        arribaDerecha === SIN_DATO ||
+        abajoIzquierda === SIN_DATO ||
+        abajoDerecha === SIN_DATO
+      ) {
+        return null;
+      }
 
       const arriba = arribaIzquierda + (arribaDerecha - arribaIzquierda) * fx;
       const abajo = abajoIzquierda + (abajoDerecha - abajoIzquierda) * fx;
