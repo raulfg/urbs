@@ -16,3 +16,5 @@ export {
   crearReproyector,
   crearReproyectorDeTerritorio,
 } from './src/reproyeccion.js';
+
+export { centroideDeAnillo, centroideDePolilinea, trocear } from './src/troceado.js';
