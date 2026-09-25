@@ -654,17 +654,29 @@ function crearCursor(buffer, base, limite) {
 }
 
 /**
- * Lee un archivo `.urbscell` completo.
+ * Abre un `.urbscell` y devuelve VISTAS TIPADAS sobre sus bytes, sin copiar
+ * ni materializar un solo objeto.
  *
- * @param {Uint8Array} bytes
+ * Esta es la puerta del runtime. `decodificarCelda` construye objetos JS
+ * comodos para inspeccionar y probar; el visor no los quiere: un `Float32Array`
+ * de vertices ya es, literalmente, lo que hay que subir a la GPU, y convertirlo
+ * antes en cinco mil arrays de pares `[este, norte]` es basura para el
+ * recolector en cada celda que entra en escena.
+ *
+ * Todo lo geometrico sale como vista sobre el MISMO `ArrayBuffer` del archivo.
+ * Solo la tabla de atributos —ids, nombres y diccionarios— se materializa,
+ * porque es JSON y no hay vista tipada que valga para una cadena.
+ *
+ * @param {Uint8Array|ArrayBuffer} origen  Lo que devuelve `fetch(...).arrayBuffer()` sirve tal cual
  * @returns {Object}
  */
-export function decodificarCelda(bytes) {
-  const cabecera = leerCabecera(bytes);
+export function vistasDeCelda(origen) {
+  const entrada = origen instanceof ArrayBuffer ? new Uint8Array(origen) : origen;
+  const cabecera = leerCabecera(entrada);
 
   // Las vistas tipadas exigen alineacion respecto al ArrayBuffer, asi que un
   // Uint8Array que empiece en un byte raro se copia antes de leer.
-  const alineado = bytes.byteOffset % ALINEACION_SECCION === 0 ? bytes : new Uint8Array(bytes);
+  const alineado = entrada.byteOffset % ALINEACION_SECCION === 0 ? entrada : new Uint8Array(entrada);
   const base = alineado.byteOffset;
   const limite = base + alineado.byteLength;
   const buffer = alineado.buffer;
@@ -696,7 +708,7 @@ export function decodificarCelda(bytes) {
   const finTabla = base + cabecera.desplazamientoTablaAtributos + cabecera.bytesTablaAtributos;
   if (finTabla > limite) {
     throw new RangeError(
-      `decodificarCelda: la tabla de atributos declara ${cabecera.bytesTablaAtributos} bytes y el archivo se queda corto. Esta truncado.`,
+      `vistasDeCelda: la tabla de atributos declara ${cabecera.bytesTablaAtributos} bytes y el archivo se queda corto. Esta truncado.`,
     );
   }
   const tabla = JSON.parse(
@@ -709,13 +721,81 @@ export function decodificarCelda(bytes) {
     ),
   );
 
-  const procedencias = tabla.diccionarios.procedencias.map((procedencia) =>
-    Object.freeze({
-      proveedor: procedencia.proveedor,
-      confianza: procedencia.confianza,
-      nota: procedencia.nota ?? null,
+  return Object.freeze({
+    cabecera,
+    edificios: Object.freeze({
+      inicioAnillo: edificiosInicioAnillo,
+      anillosInicioVertice,
+      vertices: verticesEdificios,
+      ancla: edificiosAncla,
+      altura: edificiosAltura,
+      plantas: edificiosPlantas,
+      uso: edificiosUso,
+      procedencia: edificiosProcedencia,
     }),
-  );
+    tramos: Object.freeze({
+      inicioVertice: tramosInicioVertice,
+      vertices: verticesTramos,
+      ancla: tramosAncla,
+      anchura: tramosAnchura,
+      carriles: tramosCarriles,
+      banderas: tramosBanderas,
+      tipo: tramosTipo,
+      procedencia: tramosProcedencia,
+    }),
+    diccionarios: Object.freeze({
+      usos: tabla.diccionarios.usos,
+      tiposVia: tabla.diccionarios.tiposVia,
+      procedencias: tabla.diccionarios.procedencias.map((procedencia) =>
+        Object.freeze({
+          proveedor: procedencia.proveedor,
+          confianza: procedencia.confianza,
+          nota: procedencia.nota ?? null,
+        }),
+      ),
+    }),
+    ids: Object.freeze({ edificios: tabla.edificios.ids, tramos: tabla.tramos.ids }),
+    nombres: Object.freeze({ tramos: tabla.tramos.nombres }),
+  });
+}
+
+/**
+ * Lee un archivo `.urbscell` completo y lo convierte en objetos del dominio.
+ *
+ * Comodo para inspeccionar, probar y cualquier cosa que no sea pintar. Quien
+ * vaya a subir la geometria a la GPU quiere `vistasDeCelda`, no esto.
+ *
+ * @param {Uint8Array|ArrayBuffer} bytes
+ * @returns {Object}
+ */
+export function decodificarCelda(bytes) {
+  const vistas = vistasDeCelda(bytes);
+  const { cabecera, diccionarios, ids, nombres } = vistas;
+  const { numeroEdificios, numeroTramos } = cabecera;
+
+  const {
+    inicioAnillo: edificiosInicioAnillo,
+    anillosInicioVertice,
+    vertices: verticesEdificios,
+    ancla: edificiosAncla,
+    altura: edificiosAltura,
+    plantas: edificiosPlantas,
+    uso: edificiosUso,
+    procedencia: edificiosProcedencia,
+  } = vistas.edificios;
+
+  const {
+    inicioVertice: tramosInicioVertice,
+    vertices: verticesTramos,
+    ancla: tramosAncla,
+    anchura: tramosAnchura,
+    carriles: tramosCarriles,
+    banderas: tramosBanderas,
+    tipo: tramosTipo,
+    procedencia: tramosProcedencia,
+  } = vistas.tramos;
+
+  const procedencias = diccionarios.procedencias;
 
   const edificios = [];
   for (let i = 0; i < numeroEdificios; i += 1) {
@@ -732,12 +812,12 @@ export function decodificarCelda(bytes) {
 
     edificios.push(
       Object.freeze({
-        id: tabla.edificios.ids[i],
+        id: ids.edificios[i],
         anillos,
         ancla: Object.freeze({ este: edificiosAncla[i * 2], norte: edificiosAncla[i * 2 + 1] }),
         alturaMetros: Number.isNaN(altura) ? null : altura,
         plantas: plantas === AUSENTE_ENTERO ? null : plantas,
-        uso: tabla.diccionarios.usos[edificiosUso[i]],
+        uso: diccionarios.usos[edificiosUso[i]],
         procedencia: procedencias[edificiosProcedencia[i]],
       }),
     );
@@ -753,14 +833,14 @@ export function decodificarCelda(bytes) {
 
     tramos.push(
       Object.freeze({
-        id: tabla.tramos.ids[i],
+        id: ids.tramos[i],
         eje,
         ancla: Object.freeze({ este: tramosAncla[i * 2], norte: tramosAncla[i * 2 + 1] }),
-        tipo: tabla.diccionarios.tiposVia[tramosTipo[i]],
+        tipo: diccionarios.tiposVia[tramosTipo[i]],
         anchuraMetros: tramosAnchura[i],
         carriles: carriles === AUSENTE_ENTERO ? null : carriles,
         sentidoUnico: (tramosBanderas[i] & BIT_SENTIDO_UNICO) !== 0,
-        nombre: tabla.tramos.nombres[i] ?? null,
+        nombre: nombres.tramos[i] ?? null,
         procedencia: procedencias[tramosProcedencia[i]],
       }),
     );

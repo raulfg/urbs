@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>URBS — visor de celdas</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%2310131a'/><path d='M3 12V7h2v5zm4 0V4h2v8zm4 0V6h2v6z' fill='%23d9a06a'/></svg>" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --tinta: #e8eaed;
+        --fondo: #10131a;
+        --panel: rgba(16, 19, 26, 0.82);
+        --borde: rgba(232, 234, 237, 0.14);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--fondo);
+        color: var(--tinta);
+        font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      }
+
+      canvas {
+        display: block;
+      }
+
+      .panel {
+        position: fixed;
+        background: var(--panel);
+        border: 1px solid var(--borde);
+        border-radius: 8px;
+        padding: 10px 12px;
+        backdrop-filter: blur(8px);
+      }
+
+      #estado {
+        top: 12px;
+        left: 12px;
+        min-width: 15rem;
+      }
+
+      #estado dl {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 2px 12px;
+        margin: 0;
+      }
+
+      #estado dt {
+        opacity: 0.55;
+      }
+
+      #estado dd {
+        margin: 0;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+
+      #leyenda {
+        bottom: 12px;
+        left: 12px;
+        max-width: 22rem;
+      }
+
+      #leyenda h2 {
+        margin: 0 0 6px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      #leyenda ul {
+        margin: 0 0 8px;
+        padding: 0;
+        list-style: none;
+      }
+
+      #leyenda li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .muestra {
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+        flex: none;
+      }
+
+      #creditos {
+        opacity: 0.6;
+        font-size: 11px;
+        border-top: 1px solid var(--borde);
+        padding-top: 6px;
+      }
+
+      #creditos a {
+        color: inherit;
+      }
+
+      #ayuda {
+        top: 12px;
+        right: 12px;
+        text-align: right;
+        opacity: 0.75;
+      }
+
+      #aviso {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-content: center;
+        gap: 10px;
+        text-align: center;
+        background: rgba(16, 19, 26, 0.92);
+        padding: 2rem;
+      }
+
+      #aviso[hidden] {
+        display: none;
+      }
+
+      #aviso strong {
+        font-size: 18px;
+      }
+
+      #aviso code {
+        background: rgba(232, 234, 237, 0.1);
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+    </style>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/node_modules/three/build/three.module.js",
+          "three/addons/": "/node_modules/three/examples/jsm/",
+          "earcut": "/node_modules/earcut/src/earcut.js",
+          "urbs-core": "/packages/urbs-core/index.js"
+        }
+      }
+    </script>
+  </head>
+
+  <body>
+    <section class="panel" id="estado" aria-live="polite">
+      <dl>
+        <dt>Celdas</dt>
+        <dd id="m-celdas">—</dd>
+        <dt>Edificios</dt>
+        <dd id="m-edificios">—</dd>
+        <dt>Geometrias GPU</dt>
+        <dd id="m-geometrias">—</dd>
+        <dt>Triangulos</dt>
+        <dd id="m-triangulos">—</dd>
+        <dt>Fotogramas</dt>
+        <dd id="m-fps">—</dd>
+        <dt>Este / Norte</dt>
+        <dd id="m-posicion">—</dd>
+        <dt>Rebases</dt>
+        <dd id="m-rebases">—</dd>
+      </dl>
+    </section>
+
+    <section class="panel" id="ayuda">
+      <div>Clic para tomar el raton</div>
+      <div>WASD mover · R/F subir y bajar</div>
+      <div>Mayus acelerar · Esc soltar</div>
+    </section>
+
+    <section class="panel" id="leyenda">
+      <h2 id="titulo-territorio">Cargando…</h2>
+      <ul id="colores"></ul>
+      <div id="creditos"></div>
+    </section>
+
+    <div id="aviso" hidden><strong id="aviso-titulo"></strong><span id="aviso-texto"></span></div>
+
+    <script type="module" src="./visor.js"></script>
+  </body>
+</html>

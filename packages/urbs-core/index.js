@@ -51,6 +51,7 @@ export {
   margenPorDefecto,
   codificarCelda,
   decodificarCelda,
+  vistasDeCelda,
   leerCabecera,
 } from './src/formato/celda-binaria.js';
 export { Capa, validarProveedor, metodoDeCapa } from './src/proveedores/contratos.js';
