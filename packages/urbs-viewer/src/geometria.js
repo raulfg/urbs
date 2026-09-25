@@ -19,6 +19,8 @@ import earcut from 'earcut';
 
 import { ALTURA_PLANTA_POR_DEFECTO, Confianza } from 'urbs-core';
 
+import { bordesDeCalzada } from './calzada.js';
+
 /**
  * Altura de un edificio del que no se sabe nada. Ni cero —seria un poligono
  * invisible— ni una torre: dos plantas y media, lo mas comun en un casco viejo.
@@ -234,43 +236,68 @@ function extruirEdificio(malla, anillos, altura, color) {
 }
 
 /**
- * Cinta plana de un tramo de via, a ras de suelo.
+ * Calzada de un tramo de via, a ras de suelo.
  *
- * Sin ingletes en las uniones: en un cambio de direccion brusco quedan cunas
- * sin cubrir. Se ve, y se arregla cuando haya calzada de verdad; para mirar la
- * ciudad desde el aire, una cinta por segmento basta.
+ * Los bordes salen ya ingletados de `bordesDeCalzada`: un punto por vertice, no
+ * cuatro esquinas por segmento. Aqui solo queda coserlos en una tira de
+ * cuadrilateros, que es lo unico que sabe de triangulos y de ejes de escena.
  *
  * @param {ReturnType<typeof crearMalla>} malla
  * @param {Float32Array} eje  Pares [este, norte] seguidos
  * @param {number} anchura
  * @returns {void}
  */
-function tenderCinta(malla, eje, anchura) {
-  const mitad = anchura / 2;
+function tenderCalzada(malla, eje, anchura) {
+  // El dato real puede traer una anchura invalida en un tramo suelto. Perder
+  // ese tramo es mejor que perder la celda entera, que es lo que pasaria si se
+  // dejara subir el RangeError.
+  if (!(Number.isFinite(anchura) && anchura > 0)) {
+    return;
+  }
 
-  for (let i = 0; i + 3 < eje.length; i += 2) {
-    const e1 = eje[i];
-    const n1 = eje[i + 1];
-    const e2 = eje[i + 2];
-    const n2 = eje[i + 3];
+  const { derecha, izquierda } = bordesDeCalzada(eje, anchura);
+  const vertices = derecha.length / 2;
+  if (vertices < 2) {
+    return;
+  }
 
-    const de = e2 - e1;
-    const dn = n2 - n1;
-    const largo = Math.hypot(de, dn);
-    if (largo === 0) {
-      continue;
-    }
-    const pe = (dn / largo) * mitad;
-    const pn = (-de / largo) * mitad;
+  let derechaAnterior = malla.vertice(
+    derecha[0],
+    ALTURA_VIARIO,
+    -derecha[1],
+    ARRIBA,
+    COLOR_VIARIO,
+  );
+  let izquierdaAnterior = malla.vertice(
+    izquierda[0],
+    ALTURA_VIARIO,
+    -izquierda[1],
+    ARRIBA,
+    COLOR_VIARIO,
+  );
 
-    const a = malla.vertice(e1 + pe, ALTURA_VIARIO, -(n1 + pn), ARRIBA, COLOR_VIARIO);
-    const b = malla.vertice(e2 + pe, ALTURA_VIARIO, -(n2 + pn), ARRIBA, COLOR_VIARIO);
-    const c = malla.vertice(e2 - pe, ALTURA_VIARIO, -(n2 - pn), ARRIBA, COLOR_VIARIO);
-    const d = malla.vertice(e1 - pe, ALTURA_VIARIO, -(n1 - pn), ARRIBA, COLOR_VIARIO);
+  for (let i = 1; i < vertices; i += 1) {
+    const d = malla.vertice(
+      derecha[i * 2],
+      ALTURA_VIARIO,
+      -derecha[i * 2 + 1],
+      ARRIBA,
+      COLOR_VIARIO,
+    );
+    const z = malla.vertice(
+      izquierda[i * 2],
+      ALTURA_VIARIO,
+      -izquierda[i * 2 + 1],
+      ARRIBA,
+      COLOR_VIARIO,
+    );
 
     // Devanado antihorario visto desde arriba, para que la cara mire al cielo.
-    malla.triangulo(a, b, c);
-    malla.triangulo(a, c, d);
+    malla.triangulo(derechaAnterior, d, z);
+    malla.triangulo(derechaAnterior, z, izquierdaAnterior);
+
+    derechaAnterior = d;
+    izquierdaAnterior = z;
   }
 }
 
@@ -311,7 +338,7 @@ export function construirGeometriaDeCelda(vistas) {
   for (let i = 0; i < cabecera.numeroTramos; i += 1) {
     const desde = tramos.inicioVertice[i] * 2;
     const hasta = tramos.inicioVertice[i + 1] * 2;
-    tenderCinta(malla, tramos.vertices.subarray(desde, hasta), tramos.anchura[i]);
+    tenderCalzada(malla, tramos.vertices.subarray(desde, hasta), tramos.anchura[i]);
   }
 
   return {

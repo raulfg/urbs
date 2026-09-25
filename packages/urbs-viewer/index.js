@@ -22,6 +22,14 @@ export {
 } from './src/geometria.js';
 
 export {
+  LIMITE_INGLETE,
+  PROLONGACION_EXTREMO,
+  TOLERANCIA_VERTICE,
+  bordesDeCalzada,
+  limpiarEje,
+} from './src/calzada.js';
+
+export {
   UMBRAL_REBASE_POR_DEFECTO,
   aEscena,
   desplazamientoDeCelda,

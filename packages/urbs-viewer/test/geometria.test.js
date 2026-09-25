@@ -311,6 +311,103 @@ test('un tramo produce una cinta plana a ras de suelo', () => {
   assert.ok(Math.abs(Math.min(...zetas) - -105) < 1e-4);
 });
 
+test('un giro comparte los vertices de la union: la calzada no deja cuna', () => {
+  const geometria = construirGeometriaDeCelda(
+    vistasDe({
+      edificios: [],
+      tramos: [
+        {
+          id: 'way/10',
+          eje: [
+            [20, 20],
+            [120, 20],
+            [120, 120],
+          ],
+          ancla: { este: 90, norte: 50 },
+          tipo: 'secundaria',
+          anchuraMetros: 10,
+          carriles: 2,
+          sentidoUnico: false,
+          nombre: null,
+          procedencia: DECLARADO,
+        },
+      ],
+    }),
+  );
+
+  // Tres vertices de eje = dos cuadrilateros = cuatro triangulos. Y seis
+  // vertices en total, dos por vertice de eje: si la union no se compartiera
+  // serian ocho, y entre los dos rectangulos quedaria el hueco de siempre.
+  assert.equal(geometria.indices.length / 3, 4);
+  assert.equal(geometria.posiciones.length / 3, 6);
+});
+
+test('un tramo con un vertice repetido no mete NaN en la malla', () => {
+  // El dato real trae vertices duplicados. Un segmento de largo cero divide
+  // por cero al normalizar, y un solo NaN revienta la celda entera.
+  const geometria = construirGeometriaDeCelda(
+    vistasDe({
+      edificios: [],
+      tramos: [
+        {
+          id: 'way/11',
+          eje: [
+            [10, 10],
+            [60, 10],
+            [60, 10],
+            [60, 90],
+          ],
+          ancla: { este: 45, norte: 40 },
+          tipo: 'residencial',
+          anchuraMetros: 6,
+          carriles: 1,
+          sentidoUnico: true,
+          nombre: null,
+          procedencia: ESTIMADO,
+        },
+      ],
+    }),
+  );
+
+  assert.ok(geometria.posiciones.length > 0);
+  for (const valor of geometria.posiciones) {
+    assert.ok(Number.isFinite(valor), 'un vertice de calzada salio NaN');
+  }
+});
+
+test('toda la calzada mira al cielo: ningun triangulo sale devanado del reves', () => {
+  const geometria = construirGeometriaDeCelda(
+    vistasDe({
+      edificios: [],
+      tramos: [
+        {
+          id: 'way/12',
+          eje: [
+            [10, 10],
+            [90, 10],
+            [90, 90],
+            [10, 90],
+            [10, 40],
+          ],
+          ancla: { este: 50, norte: 50 },
+          tipo: 'secundaria',
+          anchuraMetros: 8,
+          carriles: 2,
+          sentidoUnico: false,
+          nombre: null,
+          procedencia: DECLARADO,
+        },
+      ],
+    }),
+  );
+
+  for (const { puntos, normal } of triangulos(geometria)) {
+    const devanado = normalDeDevanado(puntos);
+    const producto = devanado[0] * normal[0] + devanado[1] * normal[1] + devanado[2] * normal[2];
+    assert.ok(producto > 0, 'un triangulo de calzada apunta al reves que su normal');
+  }
+});
+
 // --- Celda vacia y forma de salida
 
 test('una celda sin nada produce arrays vacios, no un error', () => {
