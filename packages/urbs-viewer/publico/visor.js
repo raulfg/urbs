@@ -29,7 +29,7 @@ import { crearGestorDeColisiones } from './gestor-colisiones.js';
 import { crearMundoFisico } from './mundo-fisico.js';
 import { crearOrigenFlotante, desplazamientoDeCelda } from '../src/origen-flotante.js';
 import { crearRebase } from '../src/rebase.js';
-import { radiosDeStreaming } from '../src/streaming.js';
+import { RADIO_GUARDIA_COCHE, radiosDeStreaming } from '../src/streaming.js';
 import { ALTURA_MINIMA, crearControles } from './controles.js';
 
 /** Territorio que se abre por defecto; `?territorio=` lo cambia. */
@@ -321,7 +321,6 @@ async function arrancar() {
     indice,
     base,
     origen,
-    radioMetros: RADIOS.fisica,
   });
 
   // --- Rebase. TODO lo que ocupa un sitio en el mundo se apunta aqui, y aqui
@@ -347,7 +346,7 @@ async function arrancar() {
   // eleccion del sitio de salida se hace preguntandole a Rapier si la caja del
   // coche cabe, y con el mundo vacio cabria en cualquier parte, incluida la
   // mitad de un edificio.
-  gestorColisiones.actualizar(origen.ancla);
+  gestorColisiones.actualizar([{ punto: origen.ancla, radio: RADIOS.fisica }]);
   const limite = performance.now() + 8000;
   while (gestorColisiones.cargando > 0 && performance.now() < limite) {
     await new Promise((seguir) => setTimeout(seguir, 30));
@@ -476,7 +475,14 @@ async function arrancar() {
 
     const posicion = origen.aProyectado(conduciendo ? coche.posicion : camara.position);
     gestor.actualizar(posicion);
-    gestorColisiones.actualizar(posicion);
+    // Dos anclas. La del jugador manda; la del coche es solo una GUARDIA, con
+    // un radio mucho menor y solo sobre la capa de fisicas: un coche que nadie
+    // mira no necesita ver, necesita APOYARSE. Anclar tambien el render
+    // duplicaria la ciudad dibujada por un coche fuera de pantalla.
+    gestorColisiones.actualizar([
+      { punto: posicion, radio: RADIOS.fisica },
+      { punto: origen.aProyectado(coche.posicion), radio: RADIO_GUARDIA_COCHE },
+    ]);
     mundoFisico.paso(segundos);
     renderer.render(escena, camara);
 

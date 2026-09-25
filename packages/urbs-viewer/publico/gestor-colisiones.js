@@ -17,7 +17,7 @@ import { vistasDeCelda } from 'urbs-core';
 import { colisionesDeCelda } from '../src/colisiones.js';
 import { alturasParaRapier } from '../src/terreno.js';
 import { desplazamientoDeCelda } from '../src/origen-flotante.js';
-import { celdasEnRadio, planDeCarga } from '../src/streaming.js';
+import { celdasParaAnclas, planDeCarga } from '../src/streaming.js';
 
 /**
  * @param {Object} datos
@@ -27,7 +27,7 @@ import { celdasEnRadio, planDeCarga } from '../src/streaming.js';
  * @param {ReturnType<import('../src/origen-flotante.js').crearOrigenFlotante>} datos.origen
  * @param {number} datos.radioMetros
  */
-export function crearGestorDeColisiones({ mundoFisico, indice, base, origen, radioMetros }) {
+export function crearGestorDeColisiones({ mundoFisico, indice, base, origen }) {
   const { ladoCeldaMetros } = indice.territorio;
 
   /** @type {Set<string>} */
@@ -87,11 +87,15 @@ export function crearGestorDeColisiones({ mundoFisico, indice, base, origen, rad
     },
 
     /**
-     * @param {{este: number, norte: number}} posicion  Metros proyectados
+     * Varias anclas a la vez. El coche abandonado es una de ellas: si su celda
+     * se descarga se queda sin suelo, y al volver a cargarla el colisionador de
+     * un edificio puede aparecer encima y expulsarlo.
+     *
+     * @param {Array<{punto: {este: number, norte: number}, radio: number}>} anclas
      * @returns {void}
      */
-    actualizar(posicion) {
-      const deseadas = celdasEnRadio(indice.celdas, posicion, radioMetros, ladoCeldaMetros);
+    actualizar(anclas) {
+      const deseadas = celdasParaAnclas(indice.celdas, anclas, ladoCeldaMetros);
       const plan = planDeCarga(deseadas, new Set([...enMundo, ...enVuelo]));
 
       for (const clave of plan.descargar) {

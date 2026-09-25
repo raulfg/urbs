@@ -114,3 +114,64 @@ export function planDeCarga(deseadas, cargadas) {
     descargar: [...cargadas].filter((clave) => !objetivo.has(clave)),
   };
 }
+
+/**
+ * Radio de guardia alrededor del coche cuando no es el que manda la camara.
+ *
+ * NO es un segundo radio de juego: es lo justo para que el suelo bajo el coche
+ * no desaparezca mientras nadie lo mira. Con celdas de 250 m, 400 m cubren la
+ * celda que pisa y sus vecinas aunque este en una esquina.
+ *
+ * Es pequeno a proposito. El coche abandonado no necesita ver, necesita
+ * APOYARSE: solo ancla la capa de fisicas, nunca la de render. Anclar las dos
+ * duplicaria la ciudad dibujada por un coche que no esta en pantalla.
+ */
+export const RADIO_GUARDIA_COCHE = 400;
+
+/**
+ * Claves de las celdas que piden VARIAS anclas a la vez, sin repetir.
+ *
+ * Hace falta porque el jugador no siempre es una sola cosa. Al volar, la camara
+ * manda; pero el coche sigue existiendo donde se quedo, y si su celda se
+ * descarga se queda sin suelo. Peor: al volver a cargarla, el colisionador de
+ * un edificio puede aparecer encima de el y expulsarlo.
+ *
+ * El orden se conserva por cercania a su ancla mas proxima, que es lo que
+ * decide que se ve antes al aterrizar.
+ *
+ * @param {Array<{clave: string, origen: {este: number, norte: number}}>} celdas
+ * @param {Array<{punto: {este: number, norte: number}, radio: number}>} anclas
+ * @param {number} ladoCeldaMetros
+ * @returns {string[]}
+ */
+export function celdasParaAnclas(celdas, anclas, ladoCeldaMetros) {
+  if (!Array.isArray(anclas) || anclas.length === 0) {
+    throw new TypeError('celdasParaAnclas: hace falta al menos un ancla {punto, radio}');
+  }
+
+  /** @type {Map<string, number>} */
+  const mejorDistancia = new Map();
+
+  for (const ancla of anclas) {
+    if (ancla?.punto === undefined) {
+      continue;
+    }
+    if (!(Number.isFinite(ancla.radio) && ancla.radio > 0)) {
+      throw new RangeError(
+        `celdasParaAnclas: el radio de un ancla debe ser positivo, y es ${ancla?.radio}`,
+      );
+    }
+    for (const celda of celdas) {
+      const distancia = distanciaACelda(ancla.punto, celda, ladoCeldaMetros);
+      if (distancia > ancla.radio) continue;
+      const previa = mejorDistancia.get(celda.clave);
+      if (previa === undefined || distancia < previa) {
+        mejorDistancia.set(celda.clave, distancia);
+      }
+    }
+  }
+
+  return [...mejorDistancia.entries()]
+    .sort((a, b) => a[1] - b[1])
+    .map(([clave]) => clave);
+}
