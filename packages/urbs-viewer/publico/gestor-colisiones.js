@@ -68,6 +68,11 @@ export function crearGestorDeColisiones({ mundoFisico, indice, base, origen, rad
       return enMundo.size;
     },
 
+    /** Cuantas celdas estan bajando ahora mismo. */
+    get cargando() {
+      return enVuelo.size;
+    },
+
     /**
      * @param {{este: number, norte: number}} posicion  Metros proyectados
      * @returns {void}

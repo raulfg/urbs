@@ -21,8 +21,8 @@ import {
   puntoDePersecucion,
 } from '../src/camara-persecucion.js';
 import { COLOR_POR_CONFIANZA } from '../src/geometria.js';
-import { puntoDeSalida } from '../src/calzada.js';
-import { ALTURA_REPOSO, crearCoche } from './coche.js';
+import { puntosDeSalida } from '../src/calzada.js';
+import { ALTO, ALTURA_REPOSO, ANCHO, LARGO, crearCoche } from './coche.js';
 import { crearGestorDeCeldas } from './gestor-celdas.js';
 import { crearGestorDeColisiones } from './gestor-colisiones.js';
 import { crearMundoFisico } from './mundo-fisico.js';
@@ -171,12 +171,15 @@ function centroUrbano(indice) {
  * @param {ReturnType<import('../src/origen-flotante.js').crearOrigenFlotante>} origen
  * @returns {Promise<{posicion: {x: number, y: number, z: number}, guinada: number}>}
  */
-async function plazaDeSalida(indice, base, origen) {
+async function plazaDeSalida(indice, base, origen, mundoFisico) {
   const celda = celdaMasDensa(indice);
   const desplazamiento = desplazamientoDeCelda(celda.origen, origen.ancla);
   // A su altura de reposo mas un palmo: cae esos centimetros y la suspension
   // se asienta sola, en vez de nacer encajada o con las ruedas en el aire.
   const altura = ALTURA_REPOSO + 0.2;
+  // Margen al comprobar el hueco: si el coche nace rozando una fachada, el
+  // primer fotograma ya es una penetracion.
+  const semiejes = { x: ANCHO / 2 + 0.4, y: ALTO / 2, z: LARGO / 2 + 0.4 };
   const reposo = { posicion: { x: desplazamiento.x, y: altura, z: desplazamiento.z }, guinada: 0 };
 
   try {
@@ -184,18 +187,29 @@ async function plazaDeSalida(indice, base, origen) {
     if (!respuesta.ok) {
       return reposo;
     }
-    const salida = puntoDeSalida(vistasDeCelda(await respuesta.arrayBuffer()));
-    if (salida === null) {
-      return reposo;
-    }
-    return {
-      posicion: {
+
+    const candidatos = puntosDeSalida(vistasDeCelda(await respuesta.arrayBuffer()));
+    for (const salida of candidatos) {
+      const posicion = {
         x: desplazamiento.x + salida.x,
         y: altura,
         z: desplazamiento.z + salida.z,
-      },
-      guinada: salida.guinada,
-    };
+      };
+      // Estar sobre el eje de una calle NO garantiza estar en hueco libre: el
+      // casco convexo de un edificio rellena patios y escotaduras, y en un
+      // casco medieval se come calles enteras. Un coche que nace dentro de un
+      // casco sale DISPARADO, porque Rapier resuelve la penetracion
+      // expulsandolo. Se prueban los candidatos hasta dar con uno limpio.
+      if (mundoFisico.huecoLibre(posicion, salida.guinada, semiejes)) {
+        return { posicion, guinada: salida.guinada };
+      }
+    }
+
+    console.warn(
+      `[urbs] ninguno de los ${candidatos.length} tramos de ${celda.clave} deja hueco para el coche; ` +
+        'sale en el centro de la celda y puede nacer dentro de un edificio',
+    );
+    return reposo;
   } catch {
     // Que el coche no tenga una calle bonita donde nacer no es motivo para no
     // arrancar el visor.
@@ -305,7 +319,18 @@ async function arrancar() {
   });
 
   // --- Coche. Nace despues del mundo, asi que se apunta al rebase a mano.
-  const plaza = await plazaDeSalida(indice, base, origen);
+  //
+  // Antes hay que tener los colisionadores de alrededor DENTRO del mundo: la
+  // eleccion del sitio de salida se hace preguntandole a Rapier si la caja del
+  // coche cabe, y con el mundo vacio cabria en cualquier parte, incluida la
+  // mitad de un edificio.
+  gestorColisiones.actualizar(origen.ancla);
+  const limite = performance.now() + 8000;
+  while (gestorColisiones.cargando > 0 && performance.now() < limite) {
+    await new Promise((seguir) => setTimeout(seguir, 30));
+  }
+
+  const plaza = await plazaDeSalida(indice, base, origen, mundoFisico);
   const coche = crearCoche({ escena, mundoFisico, ...plaza });
   rebase.apuntar(coche);
 
@@ -416,8 +441,10 @@ async function arrancar() {
 
       const frente = coche.posicion;
       const guinada = coche.guinada;
+      // El adelante del coche es `(-sin g, 0, -cos g)`, el mismo convenio que
+      // usa `puntoDePersecucion` para ponerse detras.
       mirada.set(
-        frente.x + Math.sin(guinada) * ADELANTO_MIRADA,
+        frente.x - Math.sin(guinada) * ADELANTO_MIRADA,
         frente.y + 1,
         frente.z - Math.cos(guinada) * ADELANTO_MIRADA,
       );

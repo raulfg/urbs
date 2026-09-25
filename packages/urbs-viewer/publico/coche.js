@@ -21,13 +21,21 @@ import * as THREE from 'three';
 import { crearConduccion } from '../src/conduccion.js';
 import { desplazar } from '../src/rebase.js';
 
-/** Medidas del chasis, en metros. Un utilitario. El origen es su centro. */
+/**
+ * Medidas del chasis, en metros. Un utilitario. El origen es su centro.
+ *
+ * Hay que tomarselas en serio: la ciudad viene de datos reales en metros, asi
+ * que un coche mal medido desentona con TODO lo que tiene al lado. La primera
+ * version media 2,11 m hasta el techo —una furgoneta alta— y se notaba al
+ * momento contra un portal. La cuenta de la altura total esta abajo, en
+ * `ALTURA_TECHO`, para no tener que fiarse del ojo.
+ */
 export const LARGO = 4.2;
-export const ANCHO = 1.7;
-export const ALTO = 1.1;
+export const ANCHO = 1.8;
+export const ALTO = 0.78;
 
-export const RADIO_RUEDA = 0.34;
-export const ANCHO_RUEDA = 0.25;
+export const RADIO_RUEDA = 0.32;
+export const ANCHO_RUEDA = 0.22;
 
 /** Masa, en kilos. */
 export const MASA = 1200;
@@ -41,26 +49,37 @@ export const MASA = 1200;
  *
  * La cuenta: el suelo queda a `|ALTURA_EJE| + SUSPENSION_REPOSO + RADIO_RUEDA`
  * por debajo del origen del chasis, y eso tiene que ser MAS que la semialtura
- * del chasis. Aqui son 0,91 m contra 0,55: quedan 36 cm de bajos libres.
+ * del chasis. Aqui son 0,64 m contra 0,39: quedan 25 cm de bajos libres, que es
+ * lo que tiene un coche de calle.
  */
-const ALTURA_EJE = -0.35;
-const SUSPENSION_REPOSO = 0.22;
+const ALTURA_EJE = -0.18;
+const SUSPENSION_REPOSO = 0.14;
 export const ALTURA_REPOSO = -ALTURA_EJE + SUSPENSION_REPOSO + RADIO_RUEDA;
+
+/** Alto de la cabina y donde se apoya, sobre el techo del chasis. */
+const ALTO_CABINA = 0.46;
+const CABINA_Y = ALTO / 2 + ALTO_CABINA / 2;
+
+/** Altura total sobre el suelo. Un utilitario real ronda 1,45 m. */
+export const ALTURA_TECHO = ALTURA_REPOSO + CABINA_Y + ALTO_CABINA / 2;
 
 /** Suspension. Corta y dura: es un arcade, no un todoterreno. */
 const SUSPENSION_RIGIDEZ = 30;
 const SUSPENSION_COMPRESION = 0.9;
 const SUSPENSION_RELAJACION = 0.85;
-const SUSPENSION_RECORRIDO = 0.18;
+const SUSPENSION_RECORRIDO = 0.12;
 
 /** Agarre lateral. Alto a proposito: derrapar no es la gracia de este hito. */
 const AGARRE = 2.6;
 
 /** Separacion de las ruedas respecto a los extremos del chasis. */
-const VOLADIZO = 0.6;
+const VOLADIZO = 0.7;
 
-/** Medio ancho de via. Por fuera del chasis: se ven las ruedas y no vuelca. */
-const VIA = ANCHO / 2 + ANCHO_RUEDA / 2;
+/**
+ * Medio ancho de via. Casi a ras de la carroceria, como en un coche de verdad:
+ * la rueda asoma tres centimetros y no queda el chasis flotando entre ruedas.
+ */
+const VIA = ANCHO / 2 - ANCHO_RUEDA / 2 + 0.03;
 
 /**
  * Cuanto se baja el centro de masas respecto al centro del chasis.
@@ -69,7 +88,7 @@ const VIA = ANCHO / 2 + ANCHO_RUEDA / 2;
  * la caja el coche vuelca en cuanto giras; bajandolo hasta la altura de los
  * ejes, se agarra. Un coche de verdad hace lo mismo por otros motivos.
  */
-const CENTRO_MASAS_Y = -0.3;
+const CENTRO_MASAS_Y = ALTURA_EJE;
 
 /**
  * Inercia de una caja maciza, `m/12 * (a^2 + b^2)` por eje. Se da a mano porque
@@ -177,10 +196,10 @@ export function crearCoche({ escena, mundoFisico, posicion, guinada }) {
   objeto.add(carroceria);
 
   const cabina = new THREE.Mesh(
-    new THREE.BoxGeometry(ANCHO * 0.82, ALTO * 0.62, LARGO * 0.46),
+    new THREE.BoxGeometry(ANCHO * 0.86, ALTO_CABINA, LARGO * 0.48),
     new THREE.MeshLambertMaterial({ color: 0x2a3340 }),
   );
-  cabina.position.set(0, ALTO * 0.78, -LARGO * 0.05);
+  cabina.position.set(0, CABINA_Y, LARGO * 0.04);
   objeto.add(cabina);
 
   const geometriaRueda = new THREE.CylinderGeometry(RADIO_RUEDA, RADIO_RUEDA, ANCHO_RUEDA, 14);

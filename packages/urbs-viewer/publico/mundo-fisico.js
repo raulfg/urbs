@@ -156,6 +156,25 @@ export async function crearMundoFisico(opciones = {}) {
     },
 
     /**
+     * Si una caja cabe en ese sitio sin tocar nada de lo que ya hay.
+     *
+     * Se usa para elegir donde nace el coche. Un cuerpo dinamico que aparece
+     * dentro de un casco convexo no se queda quieto: Rapier resuelve la
+     * penetracion expulsandolo, y el coche sale disparado. Preguntar antes
+     * cuesta una consulta y evita el unico fallo de este hito que da miedo.
+     *
+     * @param {{x: number, y: number, z: number}} posicion
+     * @param {number} guinada
+     * @param {{x: number, y: number, z: number}} semiejes
+     * @returns {boolean}
+     */
+    huecoLibre(posicion, guinada, semiejes) {
+      const forma = new RAPIER.Cuboid(semiejes.x, semiejes.y, semiejes.z);
+      const giro = { x: 0, y: Math.sin(guinada / 2), z: 0, w: Math.cos(guinada / 2) };
+      return mundo.intersectionWithShape(posicion, giro, forma) === null;
+    },
+
+    /**
      * Cuanto de un movimiento de la camara libre cabe sin atravesar nada.
      *
      * Devuelve el movimiento YA RECORTADO y deslizado. Quien llama lo suma a la

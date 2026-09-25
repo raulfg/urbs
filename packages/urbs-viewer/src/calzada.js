@@ -213,7 +213,15 @@ export function bordesDeCalzada(eje, anchura, opciones = {}) {
 export const LARGO_MINIMO_SALIDA = 15;
 
 /**
- * Donde plantar el coche dentro de una celda: sobre su calle MAS ANCHA.
+ * Sitios donde podria arrancar el coche, del mejor al peor.
+ *
+ * Devuelve VARIOS y no uno porque estar sobre el eje de una calle no garantiza
+ * estar en hueco libre: el colisionador de un edificio es su casco CONVEXO, que
+ * rellena patios y escotaduras, y en un casco medieval eso se come calles
+ * enteras. Un coche que nace dentro de un casco no se queda encajado: Rapier
+ * resuelve la penetracion expulsandolo, y sale disparado a doscientos metros.
+ * Quien tenga el mundo de colisiones delante prueba los candidatos por orden y
+ * se queda con el primero que este libre de verdad.
  *
  * Nacer en el centro geometrico de una celda del casco viejo es nacer dentro de
  * un edificio una de cada dos veces, y un coche que aparece dentro de un casco
@@ -236,12 +244,9 @@ export const LARGO_MINIMO_SALIDA = 15;
  * @param {Object} vistas  Lo que devuelve `vistasDeCelda`
  * @returns {{x: number, z: number, guinada: number, anchura: number}|null}
  */
-export function puntoDeSalida(vistas) {
+export function puntosDeSalida(vistas) {
   const { cabecera, tramos } = vistas;
-
-  let mejorAnchura = -1;
-  let mejorLargo = 0;
-  let mejor = null;
+  const candidatos = [];
 
   for (let i = 0; i < cabecera.numeroTramos; i += 1) {
     const desde = tramos.inicioVertice[i];
@@ -260,24 +265,36 @@ export function puntoDeSalida(vistas) {
       if (largo < LARGO_MINIMO_SALIDA) {
         continue;
       }
-      if (anchura < mejorAnchura || (anchura === mejorAnchura && largo <= mejorLargo)) {
-        continue;
-      }
 
-      mejorAnchura = anchura;
-      mejorLargo = largo;
-      // Centro del segmento: el punto mas lejos de cualquiera de sus dos
-      // extremos, que es donde menos probable es haber pillado un cruce.
-      mejor = {
+      candidatos.push({
+        // Centro del segmento: el punto mas lejos de cualquiera de sus dos
+        // extremos, que es donde menos probable es haber pillado un cruce.
         x: (e1 + e2) / 2,
         z: -(n1 + n2) / 2,
-        // Guinada cero mira al norte (-Z), asi que una direccion (de, dn)
-        // corresponde a `atan2(de, dn)`.
-        guinada: Math.atan2(de, dn),
+        // Guinada cero mira al norte (-Z). Girando `g` alrededor de Y, el
+        // adelante del coche —que es (0,0,-1) en local— acaba en
+        // `(-sin g, 0, -cos g)`. Para que eso sea la direccion del tramo en
+        // ejes de escena, que es `(de, -dn)`, hace falta `sin g = -de` y
+        // `cos g = dn`. De ahi el signo del este, que NO es decorativo: sin el
+        // el coche nace reflejado respecto al eje norte y en una calle en
+        // diagonal sale mirando de frente a una fachada.
+        guinada: Math.atan2(-de, dn),
         anchura,
-      };
+        largo,
+      });
     }
   }
 
-  return mejor;
+  // Mas ancho primero; a igual anchura, mas largo.
+  return candidatos.sort((a, b) => b.anchura - a.anchura || b.largo - a.largo);
+}
+
+/**
+ * El mejor candidato, o `null` si la celda no tiene viario utilizable.
+ *
+ * @param {Object} vistas
+ * @returns {{x: number, z: number, guinada: number, anchura: number, largo: number}|null}
+ */
+export function puntoDeSalida(vistas) {
+  return puntosDeSalida(vistas)[0] ?? null;
 }

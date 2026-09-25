@@ -7,6 +7,7 @@ import {
   bordesDeCalzada,
   limpiarEje,
   puntoDeSalida,
+  puntosDeSalida,
 } from '../src/calzada.js';
 
 /** Los bordes salen en float32; cualquier comparacion necesita holgura. */
@@ -237,19 +238,49 @@ test('el coche sale sobre el tramo mas largo de la celda, no en el centro', () =
   assert.ok(Math.abs(salida.z - -150) < HOLGURA);
 });
 
-test('el coche sale mirando a lo largo de la calle, no de traves', () => {
-  // Tramo que va al este: el coche tiene que mirar al este.
-  const salida = puntoDeSalida({
-    cabecera: { numeroTramos: 1 },
-    tramos: {
-      inicioVertice: Uint32Array.from([0, 2]),
-      vertices: Float32Array.from([0, 0, 100, 0]),
-      anchura: Float32Array.from([8]),
-    },
-  });
+/**
+ * Adelante del coche en ejes de escena para una guinada dada.
+ *
+ * Es la formula de three.js, no una reinterpretacion: girando `g` alrededor de
+ * Y, el vector local (0, 0, -1) acaba en `(-sin g, -cos g)`.
+ */
+function adelanteDe(guinada) {
+  return { x: -Math.sin(guinada), z: -Math.cos(guinada) };
+}
 
-  // Guinada cero mira al norte (-Z); mirar al este son noventa grados.
-  assert.ok(Math.abs(salida.guinada - Math.PI / 2) < HOLGURA);
+test('el coche sale mirando a lo largo de la calle, no de traves', () => {
+  // La prueba discriminante: en vez de afirmar un angulo —que es justo donde
+  // se cuela un signo— se comprueba que el ADELANTE que produce esa guinada
+  // coincide con la direccion del tramo en ejes de escena. Con el signo del
+  // este mal, el coche nacia reflejado y en una calle en diagonal miraba de
+  // frente a una fachada; se vio en el navegador, no en un angulo.
+  const casos = [
+    { eje: [0, 0, 100, 0], nombre: 'al este' },
+    { eje: [0, 0, 0, 100], nombre: 'al norte' },
+    { eje: [0, 0, -80, 0], nombre: 'al oeste' },
+    { eje: [0, 0, 0, -80], nombre: 'al sur' },
+    { eje: [0, 0, 70, 70], nombre: 'al nordeste' },
+    { eje: [0, 0, -60, 90], nombre: 'al noroeste' },
+  ];
+
+  for (const { eje, nombre } of casos) {
+    const salida = puntoDeSalida({
+      cabecera: { numeroTramos: 1 },
+      tramos: {
+        inicioVertice: Uint32Array.from([0, 2]),
+        vertices: Float32Array.from(eje),
+        anchura: Float32Array.from([8]),
+      },
+    });
+
+    const de = eje[2] - eje[0];
+    const dn = eje[3] - eje[1];
+    const largo = Math.hypot(de, dn);
+    const adelante = adelanteDe(salida.guinada);
+
+    assert.ok(Math.abs(adelante.x - de / largo) < HOLGURA, `${nombre}: el este no cuadra`);
+    assert.ok(Math.abs(adelante.z - -dn / largo) < HOLGURA, `${nombre}: el norte no cuadra`);
+  }
 });
 
 test('una celda sin viario no da punto de salida', () => {
@@ -289,4 +320,52 @@ test('un tocon corto no vale de salida por ancho que sea', () => {
   });
 
   assert.equal(salida.anchura, 6, 'el tramo de 20 m de ancho solo mide 5 m de largo');
+});
+
+test('los candidatos salen ordenados: primero el mas ancho, luego el mas largo', () => {
+  // Se devuelven VARIOS porque estar sobre el eje de una calle no garantiza
+  // estar en hueco libre: el casco convexo de un edificio se come calles
+  // enteras. Quien tenga el mundo de colisiones prueba por orden.
+  const candidatos = puntosDeSalida({
+    cabecera: { numeroTramos: 3 },
+    tramos: {
+      inicioVertice: Uint32Array.from([0, 2, 4, 6]),
+      vertices: Float32Array.from([0, 0, 0, 30, 10, 0, 10, 90, 20, 0, 20, 200]),
+      anchura: Float32Array.from([6, 12, 12]),
+    },
+  });
+
+  assert.deepEqual(
+    candidatos.map((c) => [c.anchura, Math.round(c.largo)]),
+    [
+      [12, 200],
+      [12, 90],
+      [6, 30],
+    ],
+  );
+});
+
+test('sin viario utilizable no hay candidatos, y eso no es un error', () => {
+  assert.deepEqual(
+    puntosDeSalida({
+      cabecera: { numeroTramos: 1 },
+      tramos: {
+        inicioVertice: Uint32Array.from([0, 2]),
+        vertices: Float32Array.from([0, 0, 0, 3]),
+        anchura: Float32Array.from([9]),
+      },
+    }),
+    [],
+  );
+  assert.equal(
+    puntoDeSalida({
+      cabecera: { numeroTramos: 1 },
+      tramos: {
+        inicioVertice: Uint32Array.from([0, 2]),
+        vertices: Float32Array.from([0, 0, 0, 3]),
+        anchura: Float32Array.from([9]),
+      },
+    }),
+    null,
+  );
 });
