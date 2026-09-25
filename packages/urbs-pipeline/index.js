@@ -18,3 +18,9 @@ export {
 } from './src/reproyeccion.js';
 
 export { centroideDeAnillo, centroideDePolilinea, trocear } from './src/troceado.js';
+
+export {
+  DIRECTORIO_CELDAS_POR_DEFECTO,
+  EXTENSION_CELDA,
+  generarCeldas,
+} from './src/generar.js';
