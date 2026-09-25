@@ -26,6 +26,23 @@ Encima del motor se monta un juego de mundo abierto tipo sandbox urbano: conducc
 - Las librerías externas se cargan con versión fija.
 - **Preprocesado en Node** (decidido). Motivo: el ecosistema geoespacial en JS cubre el pipeline completo (`turf`, `proj4`, `gdal-async`, parsers de `.pbf`, exportadores glTF) y comparte lenguaje y estructuras de datos con el runtime de three.js, evitando una capa de traducción.
 
+## Tests: qué es un test y qué es un comentario ejecutable
+
+**Un test solo vale si puede fallar cuando te equivocas. Si únicamente puede fallar cuando cambias de opinión, es un comentario ejecutable.**
+
+Afirma contra el comportamiento observado del sistema —lanza el rayo, lee el cuaternión, compara el vector adelante, cuenta la salida real— nunca contra un valor que has sacado a mano de camino a escribir el código. Ese valor sale del mismo razonamiento que el código, así que comparte sus errores y no puede delatarlos.
+
+Ha mordido cuatro veces, y son los únicos fallos de verdad duros que ha dado este repo:
+
+1. **Heightfield transpuesto.** El test `el orden COINCIDE, no se transpone` afirmaba mi razonamiento sobre Rapier. Pasaba, y el coche conducía sobre un terreno espejado. Se cazó con raycasts contra `cotaEnCelda`.
+2. **La cámara iba delante del coche.** `punto.x === -DISTANCIA` afirmaba un signo escrito a mano. Se cazó midiendo el cuaternión del chasis en el navegador.
+3. **Guiñada de spawn.** Comparaba un ángulo y el signo se coló dos veces. Se arregló comparando el **vector adelante** que produce la guiñada.
+4. **Conectividad del agua.** Escrita y testeada, y nunca llamada: inundó 18,68 ha de tierra seca.
+
+**Nombra los tests por el síntoma que reportaría quien juega, no por la fórmula.** `el orden COINCIDE` es exactamente lo que desanima a tocar la línea equivocada; `el coche conduce sobre un terreno espejado` no.
+
+**Corolario.** Los cuatro se cazaron ejecutando la cadena entera y contando lo que salía por el otro extremo. Los dos extremos de una tubería pueden ser correctos por separado y no estar conectados. Regenera, ejecuta y cuenta; no te fíes de que los tests estén en verde.
+
 ## Ámbito geográfico
 
 - **Vertical slice inicial**: Ciudad Vieja, Pescadería y Orzán (1–2 km²).
